@@ -1,0 +1,68 @@
+name: Support self-tests
+
+on:
+  push:
+    branches:
+      - '**'
+    paths:
+      - '.github/workflows/support-selftests.yml'
+      - 'src/Support.API/**'
+      - 'src/eShop.ServiceDefaults/**'
+      - 'tests/Support.SelfTests/**'
+      - 'tests/Directory.Build.*'
+      - 'Directory.Build.*'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'nuget.config'
+  pull_request:
+    paths:
+      - '.github/workflows/support-selftests.yml'
+      - 'src/Support.API/**'
+      - 'src/eShop.ServiceDefaults/**'
+      - 'tests/Support.SelfTests/**'
+      - 'tests/Directory.Build.*'
+      - 'Directory.Build.*'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'nuget.config'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+
+jobs:
+  self-tests:
+    name: Build and run Support self-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install .NET SDK from global.json
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Show .NET SDK
+        run: dotnet --info
+
+      - name: Restore dependencies
+        run: dotnet restore tests/Support.SelfTests/Support.SelfTests.csproj
+
+      - name: Build
+        run: dotnet build tests/Support.SelfTests/Support.SelfTests.csproj --configuration Release --no-restore
+
+      - name: Run offline checks
+        run: dotnet run --project tests/Support.SelfTests/Support.SelfTests.csproj --configuration Release --no-build --no-restore
