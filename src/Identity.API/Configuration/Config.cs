@@ -4,14 +4,23 @@
     {
         // ApiResources define the apis in your system
         public static IEnumerable<ApiResource> GetApis()
+{
+    return new List<ApiResource>
+    {
+        new ApiResource("orders", "Orders Service")
         {
-            return new List<ApiResource>
-            {
-                new ApiResource("orders", "Orders Service"),
-                new ApiResource("basket", "Basket Service"),
-                new ApiResource("webhooks", "Webhooks registration Service"),
-            };
+            Scopes = { "orders" }
+        },
+        new ApiResource("basket", "Basket Service")
+        {
+            Scopes = { "basket" }
+        },
+        new ApiResource("webhooks", "Webhooks registration Service")
+        {
+            Scopes = { "webhooks" }
         }
+    };
+}
 
         // ApiScope is used to protect the API 
         //The effect is the same as that of API resources in IdentityServer 3.x

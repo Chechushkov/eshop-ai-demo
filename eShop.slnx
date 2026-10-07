@@ -1,4 +1,4 @@
-﻿<Solution>
+<Solution>
   <Folder Name="/src/">
     <Project Path="src/eShop.AppHost/eShop.AppHost.csproj" />
     <Project Path="src/Basket.API/Basket.API.csproj" />
@@ -37,4 +37,6 @@
     <File Path="NuGet.config" />
     <File Path="README.md" />
   </Folder>
+  <Project Path="src/Support.API/Support.API.csproj" />
+  <Project Path="tests/Support.SelfTests/Support.SelfTests.csproj" />
 </Solution>

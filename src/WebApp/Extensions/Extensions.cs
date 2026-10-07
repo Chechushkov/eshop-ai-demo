@@ -1,4 +1,4 @@
-﻿using eShop.Basket.API.Grpc;
+using eShop.Basket.API.Grpc;
 using eShop.WebApp.Services.OrderStatus.IntegrationEvents;
 using eShop.WebAppComponents.Services;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -26,6 +26,7 @@ public static class Extensions
         builder.Services.AddSingleton<OrderStatusNotificationService>();
         builder.Services.AddSingleton<IProductImageUrlProvider, ProductImageUrlProvider>();
         builder.AddAIServices();
+        builder.AddSupportServices();
 
         // HTTP and GRPC client registrations
         builder.Services.AddGrpcClient<Basket.BasketClient>(o => o.Address = new("http://basket-api"))
@@ -51,45 +52,94 @@ public static class Extensions
     }
 
     public static void AddAuthenticationServices(this IHostApplicationBuilder builder)
+{
+    var configuration = builder.Configuration;
+    var services = builder.Services;
+
+    JsonWebTokenHandler.DefaultInboundClaimTypeMap.Remove("sub");
+
+    var identityUrl = configuration.GetRequiredValue("IdentityUrl");
+    var publicOrigin = configuration.GetRequiredValue("CallBackUrl").TrimEnd('/');
+    var sessionCookieLifetime =
+        configuration.GetValue("SessionCookieLifetimeMinutes", 60);
+
+    services.AddAuthorization();
+
+    services.AddAuthentication(options =>
     {
-        var configuration = builder.Configuration;
-        var services = builder.Services;
+        options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
+    })
+    .AddCookie(options =>
+        options.ExpireTimeSpan = TimeSpan.FromMinutes(sessionCookieLifetime))
+    .AddOpenIdConnect(options =>
+    {
+        options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+        options.Authority = identityUrl;
 
-        JsonWebTokenHandler.DefaultInboundClaimTypeMap.Remove("sub");
+        options.ClientId = "webapp";
+        options.ClientSecret = "secret";
+        options.ResponseType = "code";
+        options.CallbackPath = "/signin-oidc";
+        options.SignedOutCallbackPath = "/signout-callback-oidc";
+        options.SignedOutRedirectUri = publicOrigin;
 
-        var identityUrl = configuration.GetRequiredValue("IdentityUrl");
-        var callBackUrl = configuration.GetRequiredValue("CallBackUrl");
-        var sessionCookieLifetime = configuration.GetValue("SessionCookieLifetimeMinutes", 60);
+        options.PushedAuthorizationBehavior = PushedAuthorizationBehavior.Disable;
+        options.RequireHttpsMetadata = false;
+        options.SaveTokens = true;
+        options.GetClaimsFromUserInfoEndpoint = true;
 
-        // Add Authentication services
-        services.AddAuthorization();
-        services.AddAuthentication(options =>
+        options.Events.OnRedirectToIdentityProvider = context =>
         {
-            options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-            options.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
-        })
-        .AddCookie(options => options.ExpireTimeSpan = TimeSpan.FromMinutes(sessionCookieLifetime))
-        .AddOpenIdConnect(options =>
-        {
-            options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-            options.Authority = identityUrl;
-            options.SignedOutRedirectUri = callBackUrl;
-            options.ClientId = "webapp";
-            options.ClientSecret = "secret";
-            options.ResponseType = "code";
-            options.SaveTokens = true;
-            options.GetClaimsFromUserInfoEndpoint = true;
-            options.RequireHttpsMetadata = false;
-            options.Scope.Add("openid");
-            options.Scope.Add("profile");
-            options.Scope.Add("orders");
-            options.Scope.Add("basket");
-        });
+            context.ProtocolMessage.RedirectUri =
+                $"{publicOrigin}/signin-oidc";
 
-        // Blazor auth services
-        services.AddScoped<AuthenticationStateProvider, ServerAuthenticationStateProvider>();
-        services.AddCascadingAuthenticationState();
-    }
+            var logger = context.HttpContext.RequestServices
+                .GetRequiredService<ILoggerFactory>()
+                .CreateLogger("eShop.OIDC");
+
+            logger.LogInformation(
+                "OIDC redirect_uri={RedirectUri}; PAR={Par}",
+                context.ProtocolMessage.RedirectUri,
+                context.Options.PushedAuthorizationBehavior);
+
+            return Task.CompletedTask;
+        };
+
+        options.Events.OnRedirectToIdentityProviderForSignOut = context =>
+        {
+            context.ProtocolMessage.PostLogoutRedirectUri =
+                $"{publicOrigin}/signout-callback-oidc";
+
+            return Task.CompletedTask;
+        };
+
+        if (builder.Environment.IsDevelopment()
+            && Uri.TryCreate(publicOrigin, UriKind.Absolute, out var callback)
+            && callback.IsLoopback
+            && callback.Scheme == Uri.UriSchemeHttp)
+        {
+            options.ResponseMode = "query";
+
+            options.CorrelationCookie.SameSite = SameSiteMode.Lax;
+            options.CorrelationCookie.SecurePolicy =
+                CookieSecurePolicy.SameAsRequest;
+
+            options.NonceCookie.SameSite = SameSiteMode.Lax;
+            options.NonceCookie.SecurePolicy =
+                CookieSecurePolicy.SameAsRequest;
+        }
+
+        options.Scope.Add("openid");
+        options.Scope.Add("profile");
+        options.Scope.Add("orders");
+        options.Scope.Add("basket");
+    });
+
+    services.AddScoped<AuthenticationStateProvider,
+        ServerAuthenticationStateProvider>();
+    services.AddCascadingAuthenticationState();
+}
 
     private static void AddAIServices(this IHostApplicationBuilder builder)
     {

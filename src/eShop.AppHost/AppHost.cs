@@ -1,4 +1,4 @@
-﻿using System.IO.Pipes;
+using System.IO.Pipes;
 using eShop.AppHost;
 
 var builder = DistributedApplication.CreateBuilder(args);
@@ -10,14 +10,17 @@ var redis = builder.AddRedis("redis");
 var rabbitMq = builder.AddRabbitMQ("eventbus")
     .WithLifetime(ContainerLifetime.Persistent);
 var postgres = builder.AddPostgres("postgres")
-    .WithImage("ankane/pgvector")
-    .WithImageTag("latest")
+    .WithImage("pgvector/pgvector")
+    .WithImageTag("0.8.7-pg17")
+    // PostgreSQL 17 stores data here. Explicit path for a custom image tag.
+    .WithVolume("eshop-learning-postgres17-data", "/var/lib/postgresql/data")
     .WithLifetime(ContainerLifetime.Persistent);
 
 var catalogDb = postgres.AddDatabase("catalogdb");
 var identityDb = postgres.AddDatabase("identitydb");
 var orderDb = postgres.AddDatabase("orderingdb");
 var webhooksDb = postgres.AddDatabase("webhooksdb");
+var knowledgeDb = postgres.AddDatabase("knowledge");
 
 var launchProfileName = ShouldUseHttpForEndpoints() ? "http" : "https";
 
@@ -58,6 +61,20 @@ var webHooksApi = builder.AddDotnetProject("webhooks-api", "../Webhooks.API")
     .WithReference(webhooksDb)
     .WithEnvironment("Identity__Url", identityEndpoint);
 
+// BEGIN SUPPORT ADDON
+var supportOpenAiKey = builder.AddParameter("support-openai-key", secret: true);
+var supportApi = builder.AddDotnetProject("support-api", "../Support.API", o => o.LaunchProfileName = "http")
+    .WithReference(knowledgeDb).WaitFor(knowledgeDb)
+    .WithReference(orderingApi).WaitFor(orderingApi)
+    .WaitFor(identityApi)
+    .WithEnvironment("Identity__Url", identityEndpoint)
+    .WithEnvironment("Identity__Audience", "orders")
+    .WithEnvironment("OpenAI__ApiKey", supportOpenAiKey)
+    .WithEnvironment("OpenAI__Model", builder.Configuration["Support:Model"] ?? "gpt-5.4-mini")
+    .WithEnvironment("OpenAI__EmbeddingModel", "text-embedding-3-small")
+    .WithHttpHealthCheck("/health");
+// END SUPPORT ADDON
+
 // Reverse proxies
 builder.AddYarp("mobile-bff")
     .WithExternalHttpEndpoints()
@@ -74,6 +91,7 @@ var webApp = builder.AddDotnetProject("webapp", "../WebApp", o => o.LaunchProfil
     .WithReference(basketApi)
     .WithReference(catalogApi)
     .WithReference(orderingApi)
+    .WithReference(supportApi).WaitFor(supportApi)
     .WithReference(rabbitMq).WaitFor(rabbitMq)
     .WaitFor(identityApi)
     .WithEnvironment("IdentityUrl", identityEndpoint);
@@ -101,6 +119,13 @@ identityApi.WithEnvironment("BasketApiClient", basketApi.GetEndpoint("http"))
            .WithEnvironment("WebhooksApiClient", webHooksApi.GetEndpoint("http"))
            .WithEnvironment("WebhooksWebClient", webhooksClient.GetEndpoint(launchProfileName))
            .WithEnvironment("WebAppClient", webApp.GetEndpoint(launchProfileName));
+
+// Адрес браузера при учебном доступе через HTTP и SSH-туннель.
+if (launchProfileName == "http")
+{
+    webApp.WithEnvironment("CallBackUrl", "http://localhost:5045");
+    identityApi.WithEnvironment("WebAppClient", "http://localhost:5045");
+}        
 
 builder.Build().Run();
 

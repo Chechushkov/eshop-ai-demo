@@ -493,3 +493,13 @@ $RECYCLE.BIN/
 /playwright/.auth/
 /user.json
 .azure
+
+# Local configuration and generated files
+.env
+.env.*
+!.env.example
+.eshop-dev/
+.aspire/
+artifacts/
+**/bin/
+**/obj/

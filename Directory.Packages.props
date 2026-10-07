@@ -89,4 +89,7 @@
     <!-- Before license change -->
     <PackageVersion Include="MediatR" Version="13.1.0" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.Agents.AI.Workflows" Version="1.23.0" />
+  </ItemGroup>
 </Project>

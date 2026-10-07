@@ -1,0 +1,544 @@
+@page "/support"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@implements IDisposable
+@inject SupportService SupportClient
+@inject OrderingService Ordering
+@inject NavigationManager Navigation
+
+<PageTitle>Поддержка eShop</PageTitle>
+
+<section style="max-width: 850px; margin: 2rem auto; padding: 1rem;">
+    <h1>Поддержка eShop</h1>
+    <p>Задай вопрос о правилах магазина или выбери свой заказ.
+        История сохраняется в PostgreSQL и доступна только твоему аккаунту.</p>
+    <p>
+        <button type="button" @onclick="NewConversation"
+                disabled="@(busy || loadingConversations)">
+            Новый разговор
+        </button>
+        @if (ConversationId is Guid id)
+        {
+            <span style="margin-left: 1rem;">
+                Разговор: <code>@id.ToString("N")</code>
+            </span>
+        }
+    </p>
+
+    <details open style="margin: 1rem 0; padding: 1rem; border: 1px solid #ddd; border-radius: 8px;">
+        <summary><strong>Сохранённые разговоры</strong></summary>
+        <p>Последние 50 разговоров твоего аккаунта. Название — первый вопрос.</p>
+
+        <button type="button" @onclick="RefreshConversations"
+                disabled="@(busy || loadingConversations)">
+            @(loadingConversations ? "Загружаю список…" : "Обновить список")
+        </button>
+
+        @if (listError is not null)
+        {
+            <p role="alert" style="color: #a02020;">@listError</p>
+        }
+
+        @if (!loadingConversations && conversations.Length == 0 && listError is null)
+        {
+            <p>Сохранённых разговоров пока нет.
+                Разговор появится здесь после первого ответа.</p>
+        }
+
+        <nav aria-label="Сохранённые разговоры"
+             style="max-height: 300px; overflow-y: auto;">
+            @foreach (var conversation in conversations)
+            {
+                <div @key="conversation.Id" style="margin-top: 0.75rem;">
+                    <button type="button"
+                            @onclick="() => OpenConversation(conversation.Id)"
+                            disabled="@(busy || loadingConversations)"
+                            aria-current="@(conversation.Id == ConversationId ? "page" : null)"
+                            style="text-align: left; max-width: 100%; overflow-wrap: anywhere;">
+                        @conversation.Title
+                    </button>
+
+                    <div style="font-size: 0.9rem; color: #555;">
+                        Последнее сообщение:
+                        @conversation.UpdatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+
+                        @if (conversation.OrderId is int savedOrder)
+                        {
+                            <span> · Заказ @savedOrder</span>
+                        }
+
+                        @if (conversation.Id == ConversationId)
+                        {
+                            <strong> · Открыт</strong>
+                        }
+                    </div>
+                </div>
+            }
+        </nav>
+    </details>
+
+    @if (error is not null)
+    {
+        <p role="alert" style="color: #a02020;">@error</p>
+    }
+
+    @if (replayed is not null)
+    {
+        <p role="status">
+            Повтор вернул сохранённый ответ.
+            Новое сообщение и заявка не создавались.
+        </p>
+
+        @if (replayed.Metrics is { } replayMetrics)
+        {
+            @MetricsView(replayMetrics)
+        }
+
+        <details>
+            <summary>Проверка повтора</summary>
+            <pre style="white-space: pre-wrap;">@string.Join("\n", replayed.Trace)</pre>
+        </details>
+    }
+
+    @foreach (var turn in turns)
+    {
+        <article @key="turn.Request.RequestId"
+                 style="margin: 1.5rem 0; padding: 1rem; border: 1px solid #ddd; border-radius: 8px;">
+            <p>
+                <strong>Ты</strong>
+                · @turn.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                · @turn.Request.Mode
+            </p>
+
+            <div style="white-space: pre-wrap;">@turn.Request.Question</div>
+
+            <hr />
+
+            <p><strong>Помощник</strong></p>
+            <div style="white-space: pre-wrap;">@turn.Reply.Answer</div>
+
+            @if (turn.Reply.Ticket is { Created: true, Ticket: not null })
+            {
+                <p>
+                    <strong>Заявка сохранена:</strong>
+                    @turn.Reply.Ticket.Ticket.Id
+                </p>
+            }
+
+            @if (turn.Reply.Metrics is { } metrics)
+            {
+                @MetricsView(metrics)
+            }
+
+            @if (turn.Reply.Sources.Length > 0)
+            {
+                <details style="margin-top: 1rem;">
+                    <summary>Источники</summary>
+
+                    @foreach (var source in turn.Reply.Sources)
+                    {
+                        <p><strong>@source.Id — @source.Title</strong></p>
+                        <p style="white-space: pre-wrap;">@source.Text</p>
+                    }
+                </details>
+            }
+
+            <details style="margin-top: 1rem;">
+                <summary>Ход выполнения</summary>
+                <pre style="white-space: pre-wrap;">@string.Join("\n", turn.Reply.Trace)</pre>
+            </details>
+        </article>
+    }
+
+    <form @onsubmit="Ask" @onsubmit:preventDefault>
+        <label for="support-order">Заказ для следующего сообщения</label><br />
+
+        <select id="support-order" @bind="orderId" disabled="@busy">
+            <option value="">Общий вопрос без заказа</option>
+
+            @foreach (var order in orders)
+            {
+                <option value="@order.OrderNumber">
+                    Заказ @order.OrderNumber — @order.Status
+                </option>
+            }
+        </select>
+
+        <br /><br />
+
+        <label for="support-question">Сообщение</label><br />
+
+        <textarea id="support-question" @bind="question"
+                  rows="4" maxlength="2000"
+                  style="width: 100%;" disabled="@busy"></textarea>
+
+        <p>
+            <label>
+                <input type="checkbox" @bind="allowTicket"
+                       disabled="@(busy || orderId is null)" />
+                Создать заявку по выбранному заказу для этого сообщения
+            </label>
+        </p>
+
+        <label for="support-mode">Режим</label>
+
+        <select id="support-mode" @bind="mode" disabled="@busy">
+            <option value="workflow">Workflow с проверкой ответа</option>
+            <option value="agent">Агент выбирает инструменты</option>
+        </select>
+
+        @if (mode == "workflow")
+        {
+            <p>
+                <label>
+                    <input type="checkbox" @bind="demoRetry" disabled="@busy" />
+                    Демонстрация повторной попытки
+                </label>
+            </p>
+        }
+
+        <p>
+            <button type="submit"
+                    disabled="@(busy || loadingConversations || string.IsNullOrWhiteSpace(question) || ConversationId is null)">
+                @(busy ? "Готовлю ответ…" : pendingRequest is null ? "Отправить" : "Отправить / повторить")
+            </button>
+
+            @if (lastRequest is not null)
+            {
+                <button type="button" @onclick="RepeatLast"
+                        disabled="@(busy || loadingConversations)"
+                        style="margin-left: 1rem;">
+                    Повторить последний запрос
+                </button>
+            }
+        </p>
+    </form>
+
+    <p style="color: #555;">
+        После ответа разрешение на создание заявки сбрасывается.
+        Страница показывает последние 50 пар сообщений, модель получает последние 6.
+        Обновление страницы восстанавливает разговор по адресу в браузере.
+    </p>
+
+    <p style="color: #555;">
+        Показатели суммируют все вызовы при подготовке ответа,
+        включая поиск с историей и исправление ответа.
+        Время подготовки измеряется на сервере до записи ответа в базу.
+        У старых ответов показатели могут отсутствовать.
+    </p>
+</section>
+
+@code {
+    [SupplyParameterFromQuery(Name = "conversation")]
+    public Guid? ConversationId { get; set; }
+
+    private OrderRecord[] orders = [];
+    private SupportConversationSummary[] conversations = [];
+    private readonly List<SupportConversationTurn> turns = [];
+
+    private Guid? loadedId;
+    private int? orderId;
+
+    private string question =
+        "Можно вернуть товар, если я открыл коробку, но не пользовался?";
+
+    private bool allowTicket;
+    private string mode = "workflow";
+    private bool demoRetry;
+    private bool busy;
+    private bool loadingConversations;
+
+    private string? listError;
+    private string? error;
+
+    private SupportQuestion? pendingRequest;
+    private SupportQuestion? lastRequest;
+    private SupportAnswer? replayed;
+
+    private CancellationTokenSource lifetime = new();
+
+    private RenderFragment MetricsView(SupportRequestMetrics metrics) =>
+        @<details style="margin-top: 1rem;">
+            <summary>
+                @(metrics.IsReplay ? "Показатели повтора" : "Показатели запроса")
+            </summary>
+
+            <table style="width: 100%; margin-top: 0.5rem;">
+                <tbody>
+                    <tr>
+                        <th scope="row" style="text-align: left;">
+                            @(metrics.IsReplay ? "Время чтения ответа" : "Время подготовки ответа")
+                        </th>
+                        <td>@metrics.ElapsedMs мс</td>
+                    </tr>
+                    <tr>
+                        <th scope="row" style="text-align: left;">Вызовы модели</th>
+                        <td>@metrics.ModelCalls</td>
+                    </tr>
+                    <tr>
+                        <th scope="row" style="text-align: left;">Вызовы embeddings</th>
+                        <td>@metrics.EmbeddingCalls</td>
+                    </tr>
+                    <tr>
+                        <th scope="row" style="text-align: left;">Входные токены модели</th>
+                        <td>@Tokens(metrics.InputTokens)</td>
+                    </tr>
+                    <tr>
+                        <th scope="row" style="text-align: left;">Выходные токены модели</th>
+                        <td>@Tokens(metrics.OutputTokens)</td>
+                    </tr>
+                    <tr>
+                        <th scope="row" style="text-align: left;">Токены embeddings</th>
+                        <td>@Tokens(metrics.EmbeddingTokens)</td>
+                    </tr>
+                    <tr>
+                        <th scope="row" style="text-align: left;">Всего токенов</th>
+                        <td>@TotalTokens(metrics)</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            @if (!metrics.IsReplay)
+            {
+                <p>
+                    Модель: <code>@metrics.Model</code>.
+                    Embeddings: <code>@metrics.EmbeddingModel</code>.
+                </p>
+            }
+
+            @if (metrics.InputTokens is null ||
+                 metrics.OutputTokens is null ||
+                 metrics.EmbeddingTokens is null)
+            {
+                <p>Полного учёта токенов для этого запроса нет.</p>
+            }
+        </details>;
+
+    private static string Tokens(long? count) =>
+        count?.ToString("N0") ?? "неизвестно";
+
+    private static string TotalTokens(SupportRequestMetrics metrics)
+    {
+        try
+        {
+            return Tokens(checked(
+                metrics.InputTokens +
+                metrics.OutputTokens +
+                metrics.EmbeddingTokens));
+        }
+        catch (OverflowException)
+        {
+            return "неизвестно";
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ConversationId is null || ConversationId == Guid.Empty)
+        {
+            NewConversation();
+            return;
+        }
+
+        if (loadedId == ConversationId)
+            return;
+
+        Guid id = ConversationId.Value;
+        loadedId = id;
+
+        lifetime.Cancel();
+        lifetime.Dispose();
+        lifetime = new();
+
+        var ct = lifetime.Token;
+
+        turns.Clear();
+        orderId = null;
+        allowTicket = false;
+        demoRetry = false;
+        question = "Можно вернуть товар, если я открыл коробку, но не пользовался?";
+        pendingRequest = null;
+        lastRequest = null;
+        replayed = null;
+        error = null;
+        busy = true;
+
+        var listTask = LoadConversationsAsync(id, ct);
+
+        try
+        {
+            var loadedOrders = await Ordering.GetOrders();
+            ct.ThrowIfCancellationRequested();
+            orders = loadedOrders;
+
+            var conversation = await SupportClient.GetConversationAsync(id, ct);
+            ct.ThrowIfCancellationRequested();
+
+            if (conversation is not null)
+            {
+                turns.AddRange(conversation.Turns);
+                orderId = conversation.OrderId;
+                lastRequest = turns.LastOrDefault()?.Request;
+
+                if (lastRequest is not null)
+                    mode = lastRequest.Mode;
+
+                question = "";
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            if (loadedId == id && !ct.IsCancellationRequested)
+                error = ex.Message;
+        }
+        finally
+        {
+            await listTask;
+
+            if (loadedId == id && !ct.IsCancellationRequested)
+                busy = false;
+        }
+    }
+
+    private void NewConversation() => Navigation.NavigateTo(
+        "/support?conversation=" + Guid.NewGuid().ToString("D"),
+        replace: ConversationId is null || ConversationId == Guid.Empty);
+
+    private void OpenConversation(Guid id)
+    {
+        if (busy || loadingConversations || ConversationId == id)
+            return;
+
+        Navigation.NavigateTo("/support?conversation=" + id.ToString("D"));
+    }
+
+    private Task RefreshConversations() =>
+        busy || loadingConversations || ConversationId is not Guid id
+            ? Task.CompletedTask
+            : LoadConversationsAsync(id, lifetime.Token);
+
+    private async Task LoadConversationsAsync(Guid id, CancellationToken ct)
+    {
+        loadingConversations = true;
+        listError = null;
+
+        try
+        {
+            var list = await SupportClient.GetConversationsAsync(ct);
+
+            if (loadedId == id && !ct.IsCancellationRequested)
+                conversations = list;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            if (loadedId == id && !ct.IsCancellationRequested)
+                listError = "Не удалось обновить список разговоров: " + ex.Message;
+        }
+        finally
+        {
+            if (loadedId == id && !ct.IsCancellationRequested)
+                loadingConversations = false;
+        }
+    }
+
+    private async Task Ask()
+    {
+        if (busy ||
+            loadingConversations ||
+            ConversationId is not Guid id ||
+            string.IsNullOrWhiteSpace(question))
+        {
+            return;
+        }
+
+        var draft = new SupportQuestion(
+            question.Trim(),
+            orderId,
+            allowTicket && orderId is not null,
+            Guid.Empty,
+            mode,
+            demoRetry && mode == "workflow",
+            id);
+
+        // После ошибки сохраняем requestId, пока параметры не изменены.
+        if (pendingRequest is null ||
+            pendingRequest with { RequestId = Guid.Empty } != draft)
+        {
+            pendingRequest = draft with { RequestId = Guid.NewGuid() };
+        }
+
+        await Send(pendingRequest, repeat: false);
+    }
+
+    private Task RepeatLast() =>
+        lastRequest is null || busy || loadingConversations
+            ? Task.CompletedTask
+            : Send(lastRequest, repeat: true);
+
+    private async Task Send(SupportQuestion request, bool repeat)
+    {
+        Guid? id = ConversationId;
+        var ct = lifetime.Token;
+
+        busy = true;
+        error = null;
+        replayed = null;
+
+        try
+        {
+            var reply = await SupportClient.AskAsync(request, ct);
+
+            if (ConversationId != id || ct.IsCancellationRequested)
+                return;
+
+            if (repeat)
+            {
+                replayed = reply;
+                return;
+            }
+
+            // Новый текст после успешного ответа всегда имеет новый requestId.
+            if (!turns.Any(x => x.Request.RequestId == request.RequestId))
+                turns.Add(new(request, reply, DateTime.UtcNow));
+
+            if (turns.Count > 50)
+                turns.RemoveRange(0, turns.Count - 50);
+
+            lastRequest = request;
+            pendingRequest = null;
+            question = "";
+            allowTicket = false;
+
+            StateHasChanged();
+
+            // Ошибка списка не превращает сохранённый ответ в неуспешный запрос.
+            if (id is Guid current)
+                await LoadConversationsAsync(current, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            if (ConversationId == id && !ct.IsCancellationRequested)
+                error = ex.Message;
+        }
+        finally
+        {
+            if (ConversationId == id && !ct.IsCancellationRequested)
+                busy = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        lifetime.Cancel();
+        lifetime.Dispose();
+    }
+}
