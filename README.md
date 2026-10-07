@@ -2,6 +2,110 @@
 
 A reference .NET application implementing an e-commerce website using a services-based architecture with [Aspire](https://aspire.dev/).
 
+## What this fork adds
+
+[![Support self-tests](https://github.com/Chechushkov/eshop-ai-demo/actions/workflows/support-selftests.yml/badge.svg?branch=tutorial%2Fagents&event=push)](https://github.com/Chechushkov/eshop-ai-demo/actions/workflows/support-selftests.yml)
+
+An educational AI customer-support service integrated into dotnet/eShop:
+
+- RAG over eight demo-policy documents stored in PostgreSQL with pgvector.
+- A custom C# agent loop and a Microsoft Agent Framework workflow graph.
+- Tools for knowledge search, order status and support-ticket creation, with
+  permission and order-ownership checks enforced in C#.
+- Persistent conversations and replay of saved requests by identifier.
+- Execution traces, per-message timing and token metrics, and 23 offline checks
+  automated in GitHub Actions.
+
+Start with [Support.API](src/Support.API), the
+[support page](src/WebApp/Components/Pages/Support.razor) and the
+[offline checks](tests/Support.SelfTests).
+The [initial support implementation](https://github.com/Chechushkov/eshop-ai-demo/commit/6003348)
+shows the original changes added to eShop.
+
+### Run the support demo
+
+Complete the [prerequisites](#prerequisites), including cloning this repository.
+Run the following commands from the repository root on the development machine
+that hosts the AppHost. The configuration block uses Bash and prompts for the
+API key without adding its literal value to the command history:
+
+```bash
+bash <<'BASH'
+set -e
+read -r -s -p "OpenAI API key: " eshop_support_key </dev/tty
+printf '\n'
+dotnet user-secrets set "Parameters:support-openai-key" "$eshop_support_key" --project src/eShop.AppHost
+unset eshop_support_key
+dotnet user-secrets set "Support:Model" "gpt-5.4-mini" --project src/eShop.AppHost
+BASH
+```
+
+The AppHost stores development configuration using .NET user secrets and passes
+the API key to Support.API through a secret Aspire parameter. User secrets are
+stored outside the repository; they are not encrypted and are intended for
+development. See the [.NET user-secrets documentation](https://learn.microsoft.com/aspnet/core/security/app-secrets?view=aspnetcore-10.0).
+
+Support.API calls the OpenAI Responses API directly. Its default chat model is
+`gpt-5.4-mini`; embeddings use `text-embedding-3-small` with 1536 dimensions.
+The upstream Foundry chatbot is a separate feature.
+
+With the container runtime running, start the application:
+
+```bash
+ESHOP_USE_HTTP_ENDPOINTS=1 aspire run
+```
+
+The first startup imports the demo documents and generates their embeddings.
+Unchanged documents reuse the stored embeddings on subsequent starts.
+
+Open <http://localhost:5045/support> and sign in through eShop. The support UI,
+knowledge base and assistant responses are currently in Russian. Try a general
+question without selecting an order or enabling ticket creation:
+
+> Можно вернуть кофемолку, если я открыл коробку, но не пользовался?
+
+Then ask a follow-up in the same conversation:
+
+> А когда вернут деньги?
+
+For the order demo, create an order through the storefront, select it on the
+support page and ask to check its status. Enable ticket creation when you want
+to save a demo support ticket. Inspect the sources, execution trace and metrics
+shown with the reply. Use "Повторить последний запрос" to replay the saved reply.
+
+For development on a remote server, forward the browser-facing ports
+`5045` (WebApp), `5223` (Identity.API) and `18848` (Aspire dashboard) through SSH
+or your IDE. Open the application through `localhost` on your own computer.
+The current HTTP and callback settings are for local or tunneled development.
+
+### Current behavior and verification scope
+
+- For a valid order owned by the signed-in buyer, enabling `AllowTicket`
+  currently requests ticket creation in both modes. The agent completes this
+  action in C# if the model omits it. Model-based ticket-necessity decisions
+  are planned.
+- Tickets are stored in `support_tickets` in the `knowledge` database and do not
+  contact an external support service. Store policies are fictional demo rules.
+- Repeating a saved request with the same `conversationId`, `requestId` and
+  payload returns its saved reply. Reusing that identifier with different
+  parameters returns HTTP 409. Matching question text alone is not a replay.
+- Reply validation checks retrieved source IDs and known ticket numbers.
+  Invalid drafts get one repair attempt before a deterministic fallback.
+- The 23 offline checks use fake dependencies. They verify selected code paths;
+  real-model quality and PostgreSQL integration require separate evaluation.
+
+Run the support checks without an API key or a running application:
+
+```bash
+dotnet run --project tests/Support.SelfTests/Support.SelfTests.csproj --configuration Release
+```
+
+Expected final output:
+
+```text
+OK: 23 офлайн-проверок. Внешние API и PostgreSQL не вызывались.
+```
+
 ![eShop Reference Application architecture diagram](img/eshop_architecture.png)
 
 ![eShop homepage screenshot](img/eshop_homepage.png)
