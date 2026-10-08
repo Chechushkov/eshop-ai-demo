@@ -22,6 +22,16 @@ Start with [Support.API](src/Support.API), the
 The [initial support implementation](https://github.com/Chechushkov/eshop-ai-demo/commit/6003348)
 shows the original changes added to eShop.
 
+Read the [support architecture](docs/architecture.md) and the decisions on
+[tool authority](docs/adr/0001-model-proposes-code-decides.md),
+[agent and workflow orchestration](docs/adr/0002-custom-agent-loop-and-framework-workflow.md),
+and [model integration](docs/adr/0003-direct-responses-api.md).
+
+Engineering comments, diagnostics, test output and documentation use English.
+See the [language conventions](CONTRIBUTING.md#language-conventions-for-this-fork);
+the support page also uses English labels and controls. Stored conversation content
+retains its original language.
+
 ### Run the support demo
 
 Complete the [prerequisites](#prerequisites), including cloning this repository.
@@ -58,9 +68,11 @@ ESHOP_USE_HTTP_ENDPOINTS=1 aspire run
 The first startup imports the demo documents and generates their embeddings.
 Unchanged documents reuse the stored embeddings on subsequent starts.
 
-Open <http://localhost:5045/support> and sign in through eShop. The support UI,
-knowledge base and assistant responses are currently in Russian. Try a general
-question without selecting an order or enabling ticket creation:
+Open <http://localhost:5045/support> and sign in through eShop. The support page
+uses English labels and controls. The current assistant prompts and knowledge
+documents still use Russian; saved conversation content retains its original
+language. Try a general question without selecting an order or enabling ticket
+creation:
 
 > Можно вернуть кофемолку, если я открыл коробку, но не пользовался?
 
@@ -71,7 +83,7 @@ Then ask a follow-up in the same conversation:
 For the order demo, create an order through the storefront, select it on the
 support page and ask to check its status. Enable ticket creation when you want
 to save a demo support ticket. Inspect the sources, execution trace and metrics
-shown with the reply. Use "Повторить последний запрос" to replay the saved reply.
+shown with the reply. Use "Repeat last request" to replay the saved reply.
 
 For development on a remote server, forward the browser-facing ports
 `5045` (WebApp), `5223` (Identity.API) and `18848` (Aspire dashboard) through SSH
@@ -103,7 +115,7 @@ dotnet run --project tests/Support.SelfTests/Support.SelfTests.csproj --configur
 Expected final output:
 
 ```text
-OK: 23 офлайн-проверок. Внешние API и PostgreSQL не вызывались.
+OK: 23 offline checks passed. No external APIs or PostgreSQL were called.
 ```
 
 ![eShop Reference Application architecture diagram](img/eshop_architecture.png)
