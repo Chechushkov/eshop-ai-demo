@@ -51,8 +51,8 @@ public sealed class OpenAiApi(
         if (response["status"]?.GetValue<string>() != "completed")
         {
             throw new UpstreamException(
-                "OpenAI не завершил ответ. " +
-                "Проверь лимит выходных токенов в OpenAiApi.cs.");
+                "OpenAI did not complete the response. " +
+                "Check the output token limit in OpenAiApi.cs.");
         }
 
         return response;
@@ -79,12 +79,12 @@ public sealed class OpenAiApi(
 
         var items = response["data"]?.AsArray()
             ?? throw new UpstreamException(
-                "В ответе embeddings нет data.");
+                "The embeddings response is missing data.");
 
         if (items.Count != texts.Count)
         {
             throw new UpstreamException(
-                "Количество embeddings не совпадает с input.");
+                "The embedding count does not match the input count.");
         }
 
         var result = new float[texts.Count][];
@@ -98,7 +98,7 @@ public sealed class OpenAiApi(
                 result[index] is not null)
             {
                 throw new UpstreamException(
-                    "Некорректные индексы embeddings.");
+                    "Invalid or duplicate embedding index.");
             }
 
             var vector = item["embedding"]!
@@ -111,7 +111,7 @@ public sealed class OpenAiApi(
                 vector.All(x => x == 0))
             {
                 throw new UpstreamException(
-                    "Некорректная размерность или значения embedding.");
+                    "Invalid embedding dimensions or values.");
             }
 
             result[index] = vector;
@@ -120,7 +120,7 @@ public sealed class OpenAiApi(
         if (result.Any(x => x is null))
         {
             throw new UpstreamException(
-                "Не все embeddings получены.");
+                "The embeddings response is incomplete.");
         }
 
         return result;
@@ -134,7 +134,8 @@ public sealed class OpenAiApi(
         if (string.IsNullOrWhiteSpace(settings.ApiKey))
         {
             throw new UpstreamException(
-                "API-ключ не настроен: выполни 02-configure-openai.sh.");
+                "OpenAI API key is not configured. " +
+                "Set Parameters:support-openai-key for src/eShop.AppHost; see README.md.");
         }
 
         using var request = new HttpRequestMessage(
@@ -158,24 +159,24 @@ public sealed class OpenAiApi(
 
             if (!response.IsSuccessStatusCode)
             {
-                // Тело ошибки может содержать пользовательский текст.
+                // Do not expose error bodies that may contain user content.
                 throw new UpstreamException(
                     $"OpenAI HTTP {(int)response.StatusCode}. " +
-                    "Проверь ключ, доступ модели, баланс и лимиты.");
+                    "Check the API key, model access, balance and limits.");
             }
 
             result = await response.Content
                 .ReadFromJsonAsync<JsonObject>(
                     cancellationToken: ct)
                 ?? throw new UpstreamException(
-                    "Пустой ответ OpenAI.");
+                    "OpenAI returned an empty response.");
 
             return result;
         }
         finally
         {
-            // Учитываем попытку даже при исключении.
-            // Если ответ не получен, расход токенов неизвестен.
+            // Count the attempt even when it fails.
+            // Token usage is unknown when no response is available.
             metrics?.Record(path, result);
         }
     }

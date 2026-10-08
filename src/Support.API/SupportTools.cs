@@ -3,8 +3,8 @@ using System.Text.Json.Nodes;
 
 namespace eShop.SupportApi;
 
-// userId, token, выбранный заказ и разрешение на запись берутся из C#-контекста,
-// а не из аргументов, придуманных моделью.
+// User identity, token, selected order and write permission come from the C# context,
+// never from model-generated arguments.
 public sealed class SupportTools(IKnowledgeSearch knowledge, IOrderReader orders,
     ITicketStore tickets, RunContext context)
 {
@@ -12,7 +12,7 @@ public sealed class SupportTools(IKnowledgeSearch knowledge, IOrderReader orders
     {
         context.Log("tool SearchKnowledge");
         if (string.IsNullOrWhiteSpace(query) || query.Length > 2000)
-            throw new ArgumentException("Поисковый запрос должен содержать 1..2000 символов.");
+            throw new ArgumentException("The search query must contain 1 to 2000 characters.");
         var hits = await knowledge.SearchAsync(query, ct);
         context.AddSources(hits);
         return hits;
@@ -35,7 +35,7 @@ public sealed class SupportTools(IKnowledgeSearch knowledge, IOrderReader orders
             return context.Ticket = new(false, null, "Нет requestId для идемпотентности.");
         if (string.IsNullOrWhiteSpace(summary) || summary.Length > 1000)
             return context.Ticket = new(false, null, "Тема заявки должна содержать 1..1000 символов.");
-        // Повторно проверяем владение до записи; модель не может подставить чужой заказ.
+        // Recheck ownership before writing; the model cannot select another buyer's order.
         var order = await GetOrderStatusAsync(ct);
         if (!order.Found || order.Order is null)
             return context.Ticket = new(false, null, "Заказ не найден среди заказов текущего покупателя.");
@@ -46,13 +46,13 @@ public sealed class SupportTools(IKnowledgeSearch knowledge, IOrderReader orders
 
     public async Task<string> InvokeAsync(string name, string arguments, CancellationToken ct)
     {
-        var args = JsonNode.Parse(arguments)?.AsObject() ?? throw new ArgumentException("Нет arguments.");
+        var args = JsonNode.Parse(arguments)?.AsObject() ?? throw new ArgumentException("Tool arguments are missing.");
         object result = name switch
         {
             "SearchKnowledge" => await SearchKnowledgeAsync(args["query"]!.GetValue<string>(), ct),
             "GetOrderStatus" => await GetOrderStatusAsync(ct),
             "CreateSupportTicket" => await CreateSupportTicketAsync(args["summary"]!.GetValue<string>(), ct),
-            _ => throw new ArgumentException("Неизвестный инструмент.")
+            _ => throw new ArgumentException("Unknown tool.")
         };
         return JsonSerializer.Serialize(result);
     }

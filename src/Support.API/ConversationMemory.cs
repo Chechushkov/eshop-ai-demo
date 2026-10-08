@@ -20,7 +20,7 @@ public static class ConversationMemory
                 StringSplitOptions.RemoveEmptyEntries));
 
         if (title.Length == 0)
-            return "Без названия";
+            return "Untitled conversation";
 
         if (title.Length <= 100)
             return title;
@@ -100,12 +100,12 @@ public interface IConversationLease : IAsyncDisposable
 }
 
 public sealed class ConversationNotFoundException()
-    : Exception("Разговор не найден.");
+    : Exception("Conversation not found.");
 
 public sealed class ConversationRequestConflictException()
     : Exception(
-        "Этот requestId уже использован с другими параметрами. " +
-        "Отправь новое сообщение.");
+        "This requestId has already been used with different parameters. " +
+        "Send a new message with a new requestId.");
 
 public sealed class SupportConversationService(
     IConversationStore store,
@@ -135,8 +135,8 @@ public sealed class SupportConversationService(
             await using var lease =
                 await store.OpenAsync(request, userId, ct);
 
-            // Повтор: читаем сохранённый ответ.
-            // Новые обращения к модели и инструментам не выполняются.
+            // Replays return the saved reply.
+            // The model and tools are not called again.
             if (lease.CachedReply is { } cached)
             {
                 var measurement =
@@ -147,8 +147,8 @@ public sealed class SupportConversationService(
                     $"conversation replay id={request.ConversationId:N} " +
                     $"request={request.RequestId:N}",
 
-                    "Ответ из PostgreSQL: модель и инструменты " +
-                    "повторно не вызывались."
+                    "Reply loaded from PostgreSQL: the model and tools " +
+                    "were not called again."
                 };
 
                 if (measurement is not null)
@@ -160,8 +160,8 @@ public sealed class SupportConversationService(
                     Console.WriteLine($"[support] {line}");
                 }
 
-                // Меняем только возвращаемый ответ.
-                // Первоначальные показатели в базе остаются сохранёнными.
+                // Update only the returned reply.
+                // Keep the original metrics in the database.
                 return cached with
                 {
                     Metrics = measurement,
@@ -200,8 +200,8 @@ public sealed class SupportConversationService(
                 Trace = context.Trace.ToArray()
             };
 
-            // Измерение заканчивается перед записью ответа.
-            // Показатели сохраняются вместе с ответом в reply_json.
+            // Stop timing before persisting the reply.
+            // Store the metrics with the reply in reply_json.
             await lease.SaveAsync(reply, ct);
 
             return reply;

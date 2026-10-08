@@ -2,7 +2,7 @@ using eShop.ServiceDefaults;
 using eShop.WebApp.Services;
 using Microsoft.Extensions.Http.Resilience;
 
-#pragma warning disable EXTEXP0001 // Отключаем повторы долгого POST к агенту.
+#pragma warning disable EXTEXP0001 // Disable retries for the long-running agent POST.
 
 public static class SupportRegistration
 {

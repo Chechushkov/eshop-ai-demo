@@ -66,7 +66,7 @@ public sealed class ConversationRepository(
                 ON CONFLICT(id) DO NOTHING
                 """, connection, transaction))
             {
-                // Общий лимит запроса задаётся CancellationToken.
+                // The cancellation token controls the overall request timeout.
                 create.CommandTimeout = 0;
 
                 create.Parameters.AddWithValue(
@@ -76,8 +76,8 @@ public sealed class ConversationRepository(
                 await create.ExecuteNonQueryAsync(ct);
             }
 
-            // Блокировка обеспечивает последовательную обработку
-            // сообщений одного разговора, даже на нескольких API-инстансах.
+            // Serialize messages within a conversation,
+            // including requests handled by different API instances.
             await using (var owner = new NpgsqlCommand("""
                 SELECT id
                 FROM support_conversations
@@ -125,7 +125,7 @@ public sealed class ConversationRepository(
                     cached = JsonSerializer.Deserialize<SupportReply>(
                         reader.GetString(1), Json)
                         ?? throw new InvalidOperationException(
-                            "Не удалось прочитать сохранённый ответ.");
+                            "Failed to read the saved reply.");
                 }
             }
 
@@ -204,8 +204,8 @@ public sealed class ConversationRepository(
         string userId,
         CancellationToken ct)
     {
-        // Название берём из самого первого сохранённого вопроса.
-        // JOIN исключает разговоры без сохранённых сообщений.
+        // Use the first saved question as the conversation title.
+        // The join excludes conversations without saved messages.
         await using var command = dataSource.CreateCommand("""
             SELECT
                 c.id,
@@ -274,12 +274,12 @@ public sealed class ConversationRepository(
             var request = JsonSerializer.Deserialize<SupportRequest>(
                 reader.GetString(0), Json)
                 ?? throw new InvalidOperationException(
-                    "Не удалось прочитать сохранённый запрос.");
+                    "Failed to read the saved request.");
 
             var reply = JsonSerializer.Deserialize<SupportReply>(
                 reader.GetString(1), Json)
                 ?? throw new InvalidOperationException(
-                    "Не удалось прочитать сохранённый ответ.");
+                    "Failed to read the saved reply.");
 
             turns.Add(new(
                 request,
@@ -313,7 +313,7 @@ public sealed class ConversationRepository(
         {
             if (saved || CachedReply is not null)
                 throw new InvalidOperationException(
-                    "Запрос уже сохранён.");
+                    "The request has already been saved.");
 
             await using var command = new NpgsqlCommand("""
                 INSERT INTO support_conversation_turns (

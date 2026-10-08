@@ -7,8 +7,8 @@ public sealed class OrderingClient(HttpClient http) : IOrderReader
 {
     public async Task<OrderResult> GetAsync(int orderId, string accessToken, CancellationToken ct)
     {
-        // В этой версии eShop список фильтруется по sub покупателя.
-        // Не используем GET /api/orders/{id}, который сам не проверяет владельца.
+        // This eShop version filters the order list by the buyer's sub claim.
+        // Avoid GET /api/orders/{id}, which does not check ownership itself.
         using var request = new HttpRequestMessage(HttpMethod.Get, "/api/orders/?api-version=1.0");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         using var response = await http.SendAsync(request, ct);

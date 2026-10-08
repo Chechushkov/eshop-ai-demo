@@ -2,6 +2,33 @@
 
 Thank you for your interest in contributing to eShop! We're excited to collaborate with you and see how together we can improve and evolve this sample application.
 
+## Language conventions for this fork
+
+Use English for engineering work, including:
+
+- Code identifiers, comments and XML documentation.
+- Test descriptions, assertion failures and test-run summaries.
+- Application logs, execution traces, validation diagnostics and technical exceptions.
+- Repository documentation, architecture decision records and CI messages.
+- Commit messages and pull request titles and descriptions.
+
+The support page uses English for labels, controls, help text and error messages.
+The current assistant prompts and knowledge documents still support the Russian
+demo content. Saved questions, replies and conversation titles retain their
+original language. Russian domain messages, test fixtures and text-matching
+expressions may remain when they support that locale. Validation feedback is an
+engineering diagnostic and uses English even when it is also sent to the model
+for a repair attempt.
+
+Comments should explain constraints, decisions and tradeoffs. Do not add comments
+that merely restate the next line of code. Keep tool names, JSON property names,
+source IDs and request identifiers stable when translating text.
+
+A language-only change must preserve control flow, permission and ownership
+checks, replay semantics and validation conditions. Run the support self-tests
+after changing executable strings. If model feedback changes, also check a repair
+attempt with the configured model: offline fakes cannot verify its wording.
+
 ## Getting Started
 
 If this is your first visit, a great way to begin is by tackling issues tagged as `"help wanted"` or `"good first issue"`. These are specially curated to help you get acquainted with the project and make a meaningful impact early on.

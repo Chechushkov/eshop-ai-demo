@@ -14,7 +14,7 @@ public sealed class SupportAgent(
         context.Log("agent start");
         context.LogRequest();
 
-        // Предыдущие сообщения идут перед текущим вопросом.
+        // Place previous messages before the current question.
         var input = ConversationMemory.Messages(context.History);
 
         input.Add(OpenAiApi.UserMessage(
@@ -27,8 +27,8 @@ public sealed class SupportAgent(
         string text = "";
         bool completed = false;
 
-        // Ограничиваем количество обращений к модели
-        // в цикле выбора инструментов.
+        // Limit model calls
+        // in the tool-selection loop.
         for (int step = 0; step < 6; step++)
         {
             context.Log($"agent model step={step + 1}");
@@ -46,9 +46,9 @@ public sealed class SupportAgent(
                     x?["type"]?.GetValue<string>() == "function_call")
                 .ToArray();
 
-            // Сохраняем элементы ответа для следующих шагов
-            // текущего запуска, включая reasoning items.
-            // В историю PostgreSQL сохраняется итоговый SupportReply.
+            // Keep response items for subsequent steps
+            // in this run, including reasoning items.
+            // Only the final SupportReply is saved in conversation history.
             foreach (var item in output)
                 input.Add(item!.DeepClone());
 
@@ -70,8 +70,8 @@ public sealed class SupportAgent(
                     call["arguments"]!.GetValue<string>(),
                     ct);
 
-                // Результат настоящего C#-инструмента
-                // возвращается модели.
+                // Return the result of the actual C# tool
+                // to the model.
                 input.Add(new JsonObject
                 {
                     ["type"] = "function_call_output",
@@ -81,8 +81,8 @@ public sealed class SupportAgent(
             }
         }
 
-        // Требования приложения обеспечиваем и тогда,
-        // когда модель пропустила необходимый инструмент.
+        // Enforce application requirements even
+        // when the model skips a required tool.
         bool factsAdded = false;
 
         if (context.Sources.Count == 0)
@@ -99,7 +99,7 @@ public sealed class SupportAgent(
             factsAdded = true;
         }
 
-        // Статус выбранного заказа читаем в текущем запуске.
+        // Read the selected order status during the current run.
         if (context.Request.OrderId is not null &&
             context.Order is null)
         {
@@ -112,9 +112,9 @@ public sealed class SupportAgent(
             factsAdded = true;
         }
 
-        // Используем только разрешение текущего сообщения.
-        // Дополнительные проверки владения и requestId
-        // выполняются внутри SupportTools.
+        // Use permission from the current message only.
+        // SupportTools performs the additional ownership
+        // and requestId checks.
         if (context.Request.AllowTicket &&
             context.Ticket is null)
         {
@@ -144,8 +144,8 @@ public sealed class SupportAgent(
                 $"agent repair reason: completed={completed} " +
                 $"factsAdded={factsAdded} errors={errors.Length}");
 
-            // Пересобираем ответ по актуальным фактам,
-            // истории и замечаниям валидатора.
+            // Recompose the reply using current facts,
+            // conversation history and validation feedback.
             text = await composer.ComposeAsync(
                 context,
                 errors,

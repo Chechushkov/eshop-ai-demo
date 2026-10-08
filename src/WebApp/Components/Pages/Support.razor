@@ -6,32 +6,32 @@
 @inject OrderingService Ordering
 @inject NavigationManager Navigation
 
-<PageTitle>Поддержка eShop</PageTitle>
+<PageTitle>eShop Support</PageTitle>
 
 <section style="max-width: 850px; margin: 2rem auto; padding: 1rem;">
-    <h1>Поддержка eShop</h1>
-    <p>Задай вопрос о правилах магазина или выбери свой заказ.
-        История сохраняется в PostgreSQL и доступна только твоему аккаунту.</p>
+    <h1>eShop Support</h1>
+    <p>Ask about store policies or select one of your orders.
+        Your conversation history is saved to your account and only you can access it.</p>
     <p>
         <button type="button" @onclick="NewConversation"
                 disabled="@(busy || loadingConversations)">
-            Новый разговор
+            New conversation
         </button>
         @if (ConversationId is Guid id)
         {
             <span style="margin-left: 1rem;">
-                Разговор: <code>@id.ToString("N")</code>
+                Conversation: <code>@id.ToString("N")</code>
             </span>
         }
     </p>
 
     <details open style="margin: 1rem 0; padding: 1rem; border: 1px solid #ddd; border-radius: 8px;">
-        <summary><strong>Сохранённые разговоры</strong></summary>
-        <p>Последние 50 разговоров твоего аккаунта. Название — первый вопрос.</p>
+        <summary><strong>Saved conversations</strong></summary>
+        <p>Your 50 most recent conversations. Each title comes from the first question.</p>
 
         <button type="button" @onclick="RefreshConversations"
                 disabled="@(busy || loadingConversations)">
-            @(loadingConversations ? "Загружаю список…" : "Обновить список")
+            @(loadingConversations ? "Loading conversations…" : "Refresh list")
         </button>
 
         @if (listError is not null)
@@ -41,11 +41,11 @@
 
         @if (!loadingConversations && conversations.Length == 0 && listError is null)
         {
-            <p>Сохранённых разговоров пока нет.
-                Разговор появится здесь после первого ответа.</p>
+            <p>No saved conversations yet.
+                A conversation will appear here after the first reply.</p>
         }
 
-        <nav aria-label="Сохранённые разговоры"
+        <nav aria-label="Saved conversations"
              style="max-height: 300px; overflow-y: auto;">
             @foreach (var conversation in conversations)
             {
@@ -59,17 +59,17 @@
                     </button>
 
                     <div style="font-size: 0.9rem; color: #555;">
-                        Последнее сообщение:
+                        Last message:
                         @conversation.UpdatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
 
                         @if (conversation.OrderId is int savedOrder)
                         {
-                            <span> · Заказ @savedOrder</span>
+                            <span> · Order @savedOrder</span>
                         }
 
                         @if (conversation.Id == ConversationId)
                         {
-                            <strong> · Открыт</strong>
+                            <strong> · Open</strong>
                         }
                     </div>
                 </div>
@@ -85,8 +85,8 @@
     @if (replayed is not null)
     {
         <p role="status">
-            Повтор вернул сохранённый ответ.
-            Новое сообщение и заявка не создавались.
+            The saved reply was returned.
+            No new message or ticket was created.
         </p>
 
         @if (replayed.Metrics is { } replayMetrics)
@@ -95,7 +95,7 @@
         }
 
         <details>
-            <summary>Проверка повтора</summary>
+            <summary>Replay trace</summary>
             <pre style="white-space: pre-wrap;">@string.Join("\n", replayed.Trace)</pre>
         </details>
     }
@@ -105,7 +105,7 @@
         <article @key="turn.Request.RequestId"
                  style="margin: 1.5rem 0; padding: 1rem; border: 1px solid #ddd; border-radius: 8px;">
             <p>
-                <strong>Ты</strong>
+                <strong>You</strong>
                 · @turn.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
                 · @turn.Request.Mode
             </p>
@@ -114,13 +114,13 @@
 
             <hr />
 
-            <p><strong>Помощник</strong></p>
+            <p><strong>Assistant</strong></p>
             <div style="white-space: pre-wrap;">@turn.Reply.Answer</div>
 
             @if (turn.Reply.Ticket is { Created: true, Ticket: not null })
             {
                 <p>
-                    <strong>Заявка сохранена:</strong>
+                    <strong>Ticket saved:</strong>
                     @turn.Reply.Ticket.Ticket.Id
                 </p>
             }
@@ -133,7 +133,7 @@
             @if (turn.Reply.Sources.Length > 0)
             {
                 <details style="margin-top: 1rem;">
-                    <summary>Источники</summary>
+                    <summary>Sources</summary>
 
                     @foreach (var source in turn.Reply.Sources)
                     {
@@ -144,29 +144,29 @@
             }
 
             <details style="margin-top: 1rem;">
-                <summary>Ход выполнения</summary>
+                <summary>Execution trace</summary>
                 <pre style="white-space: pre-wrap;">@string.Join("\n", turn.Reply.Trace)</pre>
             </details>
         </article>
     }
 
     <form @onsubmit="Ask" @onsubmit:preventDefault>
-        <label for="support-order">Заказ для следующего сообщения</label><br />
+        <label for="support-order">Order for the next message</label><br />
 
         <select id="support-order" @bind="orderId" disabled="@busy">
-            <option value="">Общий вопрос без заказа</option>
+            <option value="">General question without an order</option>
 
             @foreach (var order in orders)
             {
                 <option value="@order.OrderNumber">
-                    Заказ @order.OrderNumber — @order.Status
+                    Order @order.OrderNumber — @order.Status
                 </option>
             }
         </select>
 
         <br /><br />
 
-        <label for="support-question">Сообщение</label><br />
+        <label for="support-question">Message</label><br />
 
         <textarea id="support-question" @bind="question"
                   rows="4" maxlength="2000"
@@ -176,15 +176,15 @@
             <label>
                 <input type="checkbox" @bind="allowTicket"
                        disabled="@(busy || orderId is null)" />
-                Создать заявку по выбранному заказу для этого сообщения
+                Create a ticket for the selected order with this message
             </label>
         </p>
 
-        <label for="support-mode">Режим</label>
+        <label for="support-mode">Mode</label>
 
         <select id="support-mode" @bind="mode" disabled="@busy">
-            <option value="workflow">Workflow с проверкой ответа</option>
-            <option value="agent">Агент выбирает инструменты</option>
+            <option value="workflow">Workflow with reply validation</option>
+            <option value="agent">Agent chooses tools</option>
         </select>
 
         @if (mode == "workflow")
@@ -192,7 +192,7 @@
             <p>
                 <label>
                     <input type="checkbox" @bind="demoRetry" disabled="@busy" />
-                    Демонстрация повторной попытки
+                    Demonstrate a retry
                 </label>
             </p>
         }
@@ -200,7 +200,7 @@
         <p>
             <button type="submit"
                     disabled="@(busy || loadingConversations || string.IsNullOrWhiteSpace(question) || ConversationId is null)">
-                @(busy ? "Готовлю ответ…" : pendingRequest is null ? "Отправить" : "Отправить / повторить")
+                @(busy ? "Preparing reply…" : pendingRequest is null ? "Send" : "Send / retry")
             </button>
 
             @if (lastRequest is not null)
@@ -208,23 +208,23 @@
                 <button type="button" @onclick="RepeatLast"
                         disabled="@(busy || loadingConversations)"
                         style="margin-left: 1rem;">
-                    Повторить последний запрос
+                    Repeat last request
                 </button>
             }
         </p>
     </form>
 
     <p style="color: #555;">
-        После ответа разрешение на создание заявки сбрасывается.
-        Страница показывает последние 50 пар сообщений, модель получает последние 6.
-        Обновление страницы восстанавливает разговор по адресу в браузере.
+        Permission to create a ticket is cleared after each reply.
+        The page shows the last 50 exchanges; the model receives the last 6.
+        Refreshing the page restores the conversation from its URL.
     </p>
 
     <p style="color: #555;">
-        Показатели суммируют все вызовы при подготовке ответа,
-        включая поиск с историей и исправление ответа.
-        Время подготовки измеряется на сервере до записи ответа в базу.
-        У старых ответов показатели могут отсутствовать.
+        Metrics include all calls made while preparing the reply,
+        including searches that use conversation history and reply repairs.
+        Preparation time is measured on the server before the reply is saved.
+        Older replies may not have metrics.
     </p>
 </section>
 
@@ -240,7 +240,7 @@
     private int? orderId;
 
     private string question =
-        "Можно вернуть товар, если я открыл коробку, но не пользовался?";
+        "Can I return an item if I opened the box but have not used it?";
 
     private bool allowTicket;
     private string mode = "workflow";
@@ -260,39 +260,39 @@
     private RenderFragment MetricsView(SupportRequestMetrics metrics) =>
         @<details style="margin-top: 1rem;">
             <summary>
-                @(metrics.IsReplay ? "Показатели повтора" : "Показатели запроса")
+                @(metrics.IsReplay ? "Replay metrics" : "Request metrics")
             </summary>
 
             <table style="width: 100%; margin-top: 0.5rem;">
                 <tbody>
                     <tr>
                         <th scope="row" style="text-align: left;">
-                            @(metrics.IsReplay ? "Время чтения ответа" : "Время подготовки ответа")
+                            @(metrics.IsReplay ? "Reply retrieval time" : "Reply preparation time")
                         </th>
-                        <td>@metrics.ElapsedMs мс</td>
+                        <td>@metrics.ElapsedMs ms</td>
                     </tr>
                     <tr>
-                        <th scope="row" style="text-align: left;">Вызовы модели</th>
+                        <th scope="row" style="text-align: left;">Model calls</th>
                         <td>@metrics.ModelCalls</td>
                     </tr>
                     <tr>
-                        <th scope="row" style="text-align: left;">Вызовы embeddings</th>
+                        <th scope="row" style="text-align: left;">Embedding calls</th>
                         <td>@metrics.EmbeddingCalls</td>
                     </tr>
                     <tr>
-                        <th scope="row" style="text-align: left;">Входные токены модели</th>
+                        <th scope="row" style="text-align: left;">Model input tokens</th>
                         <td>@Tokens(metrics.InputTokens)</td>
                     </tr>
                     <tr>
-                        <th scope="row" style="text-align: left;">Выходные токены модели</th>
+                        <th scope="row" style="text-align: left;">Model output tokens</th>
                         <td>@Tokens(metrics.OutputTokens)</td>
                     </tr>
                     <tr>
-                        <th scope="row" style="text-align: left;">Токены embeddings</th>
+                        <th scope="row" style="text-align: left;">Embedding tokens</th>
                         <td>@Tokens(metrics.EmbeddingTokens)</td>
                     </tr>
                     <tr>
-                        <th scope="row" style="text-align: left;">Всего токенов</th>
+                        <th scope="row" style="text-align: left;">Total tokens</th>
                         <td>@TotalTokens(metrics)</td>
                     </tr>
                 </tbody>
@@ -301,7 +301,7 @@
             @if (!metrics.IsReplay)
             {
                 <p>
-                    Модель: <code>@metrics.Model</code>.
+                    Model: <code>@metrics.Model</code>.
                     Embeddings: <code>@metrics.EmbeddingModel</code>.
                 </p>
             }
@@ -310,12 +310,12 @@
                  metrics.OutputTokens is null ||
                  metrics.EmbeddingTokens is null)
             {
-                <p>Полного учёта токенов для этого запроса нет.</p>
+                <p>Complete token usage is unavailable for this request.</p>
             }
         </details>;
 
     private static string Tokens(long? count) =>
-        count?.ToString("N0") ?? "неизвестно";
+        count?.ToString("N0") ?? "unknown";
 
     private static string TotalTokens(SupportRequestMetrics metrics)
     {
@@ -328,7 +328,7 @@
         }
         catch (OverflowException)
         {
-            return "неизвестно";
+            return "unknown";
         }
     }
 
@@ -356,7 +356,7 @@
         orderId = null;
         allowTicket = false;
         demoRetry = false;
-        question = "Можно вернуть товар, если я открыл коробку, но не пользовался?";
+        question = "Can I return an item if I opened the box but have not used it?";
         pendingRequest = null;
         lastRequest = null;
         replayed = null;
@@ -438,7 +438,7 @@
         catch (Exception ex)
         {
             if (loadedId == id && !ct.IsCancellationRequested)
-                listError = "Не удалось обновить список разговоров: " + ex.Message;
+                listError = "Failed to refresh conversations: " + ex.Message;
         }
         finally
         {
@@ -466,7 +466,7 @@
             demoRetry && mode == "workflow",
             id);
 
-        // После ошибки сохраняем requestId, пока параметры не изменены.
+        // Keep requestId after an error until the request parameters change.
         if (pendingRequest is null ||
             pendingRequest with { RequestId = Guid.Empty } != draft)
         {
@@ -503,7 +503,7 @@
                 return;
             }
 
-            // Новый текст после успешного ответа всегда имеет новый requestId.
+            // Assign a new requestId to the next message after a successful reply.
             if (!turns.Any(x => x.Request.RequestId == request.RequestId))
                 turns.Add(new(request, reply, DateTime.UtcNow));
 
@@ -517,7 +517,7 @@
 
             StateHasChanged();
 
-            // Ошибка списка не превращает сохранённый ответ в неуспешный запрос.
+            // A list-refresh error must not turn a saved reply into a failed request.
             if (id is Guid current)
                 await LoadConversationsAsync(current, ct);
         }

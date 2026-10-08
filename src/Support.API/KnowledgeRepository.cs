@@ -40,14 +40,14 @@ public sealed class KnowledgeRepository(NpgsqlDataSource dataSource, OpenAiApi o
     public async Task ImportAsync(string directory, CancellationToken ct)
     {
         var files = Directory.GetFiles(directory, "*.md").Order().ToArray();
-        if (files.Length == 0) throw new InvalidOperationException("В папке Knowledge нет правил.");
+        if (files.Length == 0) throw new InvalidOperationException("The Knowledge directory contains no policy documents.");
         foreach (var file in files)
         {
             var text = await File.ReadAllTextAsync(file, ct);
             string id = "support-" + Path.GetFileNameWithoutExtension(file);
             string hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
             var chunks = Split(text);
-            if (chunks.Length == 0) throw new InvalidOperationException("Пустой документ: " + id);
+            if (chunks.Length == 0) throw new InvalidOperationException("Empty knowledge document: " + id);
             await using var check = dataSource.CreateCommand("""
                 SELECT d.content_hash = @hash
                   AND (SELECT count(*) FROM knowledge_chunks c WHERE c.document_id=d.id
@@ -60,10 +60,10 @@ public sealed class KnowledgeRepository(NpgsqlDataSource dataSource, OpenAiApi o
             check.Parameters.AddWithValue("id", id);
             if (await check.ExecuteScalarAsync(ct) is true)
             {
-                Console.WriteLine($"[rag] Из кеша: {id}");
+                Console.WriteLine($"[rag] Cached: {id}");
                 continue;
             }
-            // Сначала получаем векторы, затем атомарно заменяем только этот документ.
+            // Generate embeddings before atomically replacing this document.
             var vectors = await openAi.EmbedAsync(chunks, ct);
             await using var connection = await dataSource.OpenConnectionAsync(ct);
             await using var transaction = await connection.BeginTransactionAsync(ct);
@@ -94,7 +94,7 @@ public sealed class KnowledgeRepository(NpgsqlDataSource dataSource, OpenAiApi o
                 await insert.ExecuteNonQueryAsync(ct);
             }
             await transaction.CommitAsync(ct);
-            Console.WriteLine($"[rag] Импорт: {id}, фрагментов: {chunks.Length}");
+            Console.WriteLine($"[rag] Imported: {id}, chunks: {chunks.Length}");
         }
     }
 
@@ -120,14 +120,14 @@ public sealed class KnowledgeRepository(NpgsqlDataSource dataSource, OpenAiApi o
             if (score >= 0.30)
                 result.Add(new(reader.GetString(0), reader.GetString(1), reader.GetString(2), score));
         }
-        Console.WriteLine("[rag] Найдены: " + string.Join(", ", result.Select(x => $"{x.Id} ({x.Score:F3})")));
+        Console.WriteLine("[rag] Matches: " + string.Join(", ", result.Select(x => $"{x.Id} ({x.Score:F3})")));
         return result;
     }
 
     public async Task<SupportTicket> CreateAsync(string userId, int orderId, Guid requestId,
         string summary, CancellationToken ct)
     {
-        // Уникальный ключ устраняет дубликаты при tool retry и повторе HTTP-запроса.
+        // The unique key prevents duplicate tickets on tool retries and HTTP replays.
         await using var command = dataSource.CreateCommand("""
             INSERT INTO support_tickets(id,user_id,order_id,request_id,summary)
                 VALUES(@id,@user,@order,@request,@summary)
@@ -140,7 +140,7 @@ public sealed class KnowledgeRepository(NpgsqlDataSource dataSource, OpenAiApi o
         command.Parameters.AddWithValue("request", requestId);
         command.Parameters.AddWithValue("summary", summary);
         await using var reader = await command.ExecuteReaderAsync(ct);
-        if (!await reader.ReadAsync(ct)) throw new InvalidOperationException("Заявка не сохранена.");
+        if (!await reader.ReadAsync(ct)) throw new InvalidOperationException("The support ticket was not saved.");
         return new(reader.GetString(0), reader.GetInt32(1), reader.GetString(2), reader.GetDateTime(3));
     }
 
@@ -149,7 +149,7 @@ public sealed class KnowledgeRepository(NpgsqlDataSource dataSource, OpenAiApi o
 
     public static string[] Split(string text)
     {
-        // Для коротких учебных правил — окна по 900 символов, перекрытие 100.
+        // Short demo policies use 900-character chunks with a 100-character overlap.
         text = text.Replace("\r\n", "\n").Trim();
         var chunks = new List<string>();
         for (int start = 0; start < text.Length; start += 800)

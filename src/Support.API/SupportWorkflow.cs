@@ -73,7 +73,7 @@ public sealed class SupportWorkflow(ReplyComposer composer)
                     ct.ThrowIfCancellationRequested();
 
                     throw new InvalidOperationException(
-                        $"Ошибка узла {failed.ExecutorId}.",
+                        $"Workflow executor {failed.ExecutorId} failed.",
                         failed.Data);
                 }
 
@@ -82,7 +82,7 @@ public sealed class SupportWorkflow(ReplyComposer composer)
                     ct.ThrowIfCancellationRequested();
 
                     throw new InvalidOperationException(
-                        "Ошибка workflow.",
+                        "The workflow failed.",
                         error.Exception);
                 }
 
@@ -92,7 +92,7 @@ public sealed class SupportWorkflow(ReplyComposer composer)
                     if (result is not null)
                     {
                         throw new InvalidOperationException(
-                            "Граф выдал несколько ответов.");
+                            "The workflow produced multiple replies.");
                     }
 
                     result = output;
@@ -103,7 +103,7 @@ public sealed class SupportWorkflow(ReplyComposer composer)
 
             return result
                 ?? throw new InvalidOperationException(
-                    "Граф завершился без SupportReply.");
+                    "The workflow completed without a SupportReply.");
         }
         finally
         {
@@ -144,8 +144,8 @@ public sealed class SupportWorkflow(ReplyComposer composer)
         {
             state.Log("workflow retrieve_rules");
 
-            // Уточняем вопрос по истории перед поиском.
-            // Для первого сообщения возвращается исходный вопрос.
+            // Resolve history references before knowledge search.
+            // Use the original question for the first message.
             string query =
                 await composer.ResolveRetrievalQueryAsync(
                     state,
@@ -220,8 +220,8 @@ public sealed class SupportWorkflow(ReplyComposer composer)
             if (state.Request.DemoRetry && draft.Attempt == 1)
             {
                 errors.Add(
-                    "Учебная проверка: первый черновик отклонён. " +
-                    "Напиши ответ ещё раз по фактам.");
+                    "Demo validation: the first draft was rejected. " +
+                    "Rewrite the reply using the confirmed facts.");
             }
 
             state.Log(

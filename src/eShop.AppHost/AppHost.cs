@@ -120,7 +120,7 @@ identityApi.WithEnvironment("BasketApiClient", basketApi.GetEndpoint("http"))
            .WithEnvironment("WebhooksWebClient", webhooksClient.GetEndpoint(launchProfileName))
            .WithEnvironment("WebAppClient", webApp.GetEndpoint(launchProfileName));
 
-// Адрес браузера при учебном доступе через HTTP и SSH-туннель.
+// Browser-facing address for the HTTP demo over an SSH tunnel.
 if (launchProfileName == "http")
 {
     webApp.WithEnvironment("CallBackUrl", "http://localhost:5045");

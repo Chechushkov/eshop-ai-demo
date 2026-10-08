@@ -20,7 +20,7 @@ public sealed class SupportService(HttpClient http)
             .ReadFromJsonAsync<SupportAnswer>(
                 cancellationToken: ct)
             ?? throw new InvalidOperationException(
-                "Пустой ответ Support.API.");
+                "Support.API returned an empty reply.");
     }
 
     public async Task<SupportConversationSummary[]> GetConversationsAsync(
@@ -36,7 +36,7 @@ public sealed class SupportService(HttpClient http)
             .ReadFromJsonAsync<SupportConversationSummary[]>(
                 cancellationToken: ct)
             ?? throw new InvalidOperationException(
-                "Пустой список разговоров Support.API.");
+                "Support.API returned an empty conversation-list response.");
     }
 
     public async Task<SupportConversationView?> GetConversationAsync(
@@ -59,7 +59,7 @@ public sealed class SupportService(HttpClient http)
             .ReadFromJsonAsync<SupportConversationView>(
                 cancellationToken: ct)
             ?? throw new InvalidOperationException(
-                "Пустой ответ истории Support.API.");
+                "Support.API returned an empty conversation-history response.");
     }
 
     private static async Task EnsureSuccessAsync(

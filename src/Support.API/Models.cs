@@ -57,9 +57,9 @@ public sealed record SupportReply(
     Guid? ConversationId = null,
     SupportMetrics? Metrics = null);
 
-// Показатели одного сообщения.
-// null в токенах означает неизвестный расход.
-// IsReplay=true означает чтение ранее сохранённого ответа.
+// Metrics for a single message.
+// A null token count means usage is unknown.
+// IsReplay=true identifies a reply loaded from storage.
 public sealed record SupportMetrics(
     long ElapsedMs,
     int ModelCalls,

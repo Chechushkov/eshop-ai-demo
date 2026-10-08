@@ -58,7 +58,7 @@ public sealed class ReplyComposer(IResponsesModel model)
         string[] feedback,
         CancellationToken ct)
     {
-        // Актуальные факты текущего запуска.
+        // Confirmed facts from the current run.
         var evidence = JsonSerializer.Serialize(new
         {
             context.Request.Question,
@@ -78,8 +78,8 @@ public sealed class ReplyComposer(IResponsesModel model)
             ValidationFeedback = feedback
         });
 
-        // Сначала предыдущие сообщения, затем текущий вопрос
-        // вместе с подтверждёнными фактами.
+        // Place earlier messages before the current question
+        // and its confirmed facts.
         var input = ConversationMemory.Messages(context.History);
         input.Add(OpenAiApi.UserMessage(evidence));
 
@@ -96,7 +96,7 @@ public sealed class ReplyComposer(IResponsesModel model)
         RunContext context,
         CancellationToken ct)
     {
-        // Первый вопрос уже является самостоятельным запросом.
+        // The first question does not need history to be understood.
         if (context.History.Count == 0)
             return context.Request.Question;
 
@@ -142,7 +142,7 @@ public sealed class ReplyComposer(IResponsesModel model)
                 or InvalidOperationException
                 or FormatException)
         {
-            // При неправильном JSON используем запасной запрос.
+            // Use the fallback query if the model returns invalid JSON.
         }
 
         context.Log("memory search_query fallback");
@@ -162,28 +162,28 @@ public sealed class ReplyComposer(IResponsesModel model)
         var errors = new List<string>();
 
         if (string.IsNullOrWhiteSpace(text))
-            errors.Add("Ответ пустой.");
+            errors.Add("The reply is empty.");
 
         var citations = Regex
             .Matches(text, @"\[([^\]\r\n]{1,100})\]")
             .Select(x => x.Groups[1].Value)
             .ToArray();
 
-        // Ссылки разрешены только на источники,
-        // найденные в текущем запуске.
+        // Allow citations only to sources retrieved
+        // during the current run.
         var allowed = context.Sources
             .Select(x => x.Id)
             .ToHashSet(StringComparer.Ordinal);
 
         string allowedText = allowed.Count == 0
-            ? "нет"
+            ? "none"
             : string.Join(", ", allowed.Order());
 
         if (context.Sources.Count > 0 && citations.Length == 0)
         {
             errors.Add(
-                "Добавь хотя бы одну ссылку [ID] из Sources. " +
-                "Разрешены: " + allowedText);
+                "Add at least one [ID] citation from Sources. " +
+                "Allowed IDs: " + allowedText);
         }
 
         var unknown = citations
@@ -193,23 +193,23 @@ public sealed class ReplyComposer(IResponsesModel model)
 
         if (unknown.Length > 0)
         {
-            // В диагностике показываем только ID ожидаемого формата.
+            // Include only IDs with the expected format in diagnostics.
             var safeIds = unknown.Select(id =>
                 Regex.IsMatch(
                     id,
                     @"\Asupport-[A-Za-z0-9_-]+#[0-9]{3}\z")
                     ? id
-                    : "<неверный формат ссылки>");
+                    : "<invalid citation format>");
 
             errors.Add(
-                "Удали ссылки на отсутствующие источники: " +
+                "Remove citations to unavailable sources: " +
                 string.Join(", ", safeIds) +
-                ". Разрешены: " + allowedText +
-                ". Статус заказа и номер заявки указывай " +
-                "по результатам инструментов без выдуманных ссылок.");
+                ". Allowed IDs: " + allowedText +
+                ". State the order status and ticket ID " +
+                "from tool results without inventing citations.");
         }
 
-        // Номер заявки, созданной в текущем запуске.
+        // The ticket created during the current run.
         string? expected =
             context.Ticket is { Created: true, Ticket: not null }
                 ? context.Ticket.Ticket.Id
@@ -219,10 +219,10 @@ public sealed class ReplyComposer(IResponsesModel model)
             !text.Contains(expected, StringComparison.Ordinal))
         {
             errors.Add(
-                "Укажи точный номер созданной заявки: " + expected);
+                "Include the exact ID of the created ticket: " + expected);
         }
 
-        // Разрешаем также подтверждённые номера из истории.
+        // Also allow confirmed ticket IDs from conversation history.
         var knownTickets = ConversationMemory
             .KnownTickets(context.History)
             .Select(x => x.Id)
@@ -235,16 +235,16 @@ public sealed class ReplyComposer(IResponsesModel model)
             .Any(x => !knownTickets.Contains(x.Value)))
         {
             errors.Add(
-                "Удали номера заявок, которых нет в результате сервиса.");
+                "Remove ticket IDs that were not confirmed by the service.");
         }
 
-        // Наличие старой заявки не означает создание новой.
+        // A previously saved ticket does not imply a new ticket was created.
         if (expected is null && Regex.IsMatch(
             text,
             @"(?i)\bзаявка\s+(успешно\s+)?(создана|зарегистрирована)\b|(?<!не )\b(создана|зарегистрирована)\s+заявка\b"))
         {
             errors.Add(
-                "Заявка не создавалась; не утверждай, что она создана.");
+                "No ticket was created; do not claim that one was created.");
         }
 
         return errors.ToArray();
@@ -257,8 +257,8 @@ public sealed class ReplyComposer(IResponsesModel model)
     {
         if (fallback)
         {
-            // Детерминированный ответ из подтверждённых фактов,
-            // если черновики модели не прошли проверку.
+            // Build a deterministic reply from confirmed facts
+            // when the model drafts fail validation.
             var lines = new List<string>();
 
             if (context.Order is { Found: true, Order: not null })

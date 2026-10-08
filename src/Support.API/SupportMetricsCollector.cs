@@ -3,8 +3,8 @@ using System.Text.Json.Nodes;
 
 namespace eShop.SupportApi;
 
-// Один экземпляр на HTTP-запрос.
-// Его используют обработчик сообщения и OpenAiApi-клиенты.
+// One instance per HTTP request.
+// Shared by message processing and OpenAiApi clients.
 public sealed class SupportMetricsCollector(OpenAiSettings settings)
 {
     private readonly object gate = new();
@@ -34,8 +34,8 @@ public sealed class SupportMetricsCollector(OpenAiSettings settings)
         }
     }
 
-    // Учитываем каждую попытку POST.
-    // Отсутствующее usage означает неизвестный расход.
+    // Count each POST attempt.
+    // Missing usage data means the token count is unknown.
     public void Record(string endpoint, JsonObject? response)
     {
         lock (gate)
@@ -88,7 +88,7 @@ public sealed class SupportMetricsCollector(OpenAiSettings settings)
         }
     }
 
-    // Завершаем измерение также при исключении.
+    // Stop timing even when processing fails.
     public void Stop()
     {
         lock (gate)

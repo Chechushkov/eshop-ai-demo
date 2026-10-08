@@ -27,7 +27,7 @@ builder.Services.AddSingleton(new OpenAiSettings(
     builder.Configuration["OpenAI:EmbeddingModel"]
         ?? "text-embedding-3-small"));
 
-// Общий счётчик для обработки одного HTTP-запроса.
+// Share one metrics collector across the HTTP request.
 builder.Services.AddScoped<SupportMetricsCollector>();
 
 builder.Services.AddHttpClient<OpenAiApi>(http =>
@@ -91,7 +91,7 @@ await using (var scope = app.Services.CreateAsyncScope())
         app.Lifetime.ApplicationStopping);
 }
 
-// Список разговоров текущего пользователя.
+// List conversations owned by the current user.
 app.MapGet(
     "/api/support/conversations",
     async Task<IResult> (
@@ -111,7 +111,7 @@ app.MapGet(
     })
     .RequireAuthorization();
 
-// История выбранного разговора.
+// Read the selected conversation history.
 app.MapGet(
     "/api/support/conversations/{id:guid}",
     async Task<IResult> (
@@ -135,7 +135,7 @@ app.MapGet(
     })
     .RequireAuthorization();
 
-// Новое сообщение или повтор сохранённого запроса.
+// Process a new message or replay a saved request.
 app.MapPost(
     "/api/support/ask",
     async Task<IResult> (
@@ -156,8 +156,8 @@ app.MapPost(
             return Results.Problem(
                 statusCode: 400,
                 detail:
-                    "Проверь вопрос (1..2000), orderId, requestId, " +
-                    "conversationId и mode.");
+                    "Check the question (1 to 2000 characters), orderId, requestId, " +
+                    "conversationId and mode.");
         }
 
         string? userId = http.User.FindFirst("sub")?.Value;
@@ -196,7 +196,7 @@ app.MapPost(
         {
             return Results.Problem(
                 statusCode: 404,
-                detail: "Разговор не найден. Начни новый разговор.");
+                detail: "Conversation not found. Start a new conversation.");
         }
         catch (ConversationRequestConflictException error)
         {
@@ -210,8 +210,8 @@ app.MapPost(
             return Results.Problem(
                 statusCode: 504,
                 detail:
-                    "Превышено время выполнения. " +
-                    "Повтори запрос с тем же requestId.");
+                    "The request timed out. " +
+                    "Retry with the same requestId.");
         }
         catch (Exception error)
             when (error is UpstreamException ||

@@ -16,26 +16,29 @@ var tickets = new FakeTickets();
 RunContext Context(SupportRequest request) => new(request, "buyer-test", "token-fixture");
 SupportTools Tools(RunContext context) => new(knowledge, orders, tickets, context);
 
+// Authorization and idempotency are tested with fake dependencies.
 var blocked = Context(Request());
 var denied = await Tools(blocked).CreateSupportTicketAsync("Уточнить доставку", default);
-Check(!denied.Created && tickets.Writes == 0, "заявка без разрешения блокируется");
+Check(!denied.Created && tickets.Writes == 0, "Ticket creation is blocked without permission.");
 var foreign = Context(Request(true, orderId: 999));
-Check(!(await Tools(foreign).GetOrderStatusAsync(default)).Found, "чужой заказ не найден");
+Check(!(await Tools(foreign).GetOrderStatusAsync(default)).Found, "An unavailable order is not returned.");
 Check(!(await Tools(foreign).CreateSupportTicketAsync("Доставка", default)).Created,
-    "для чужого заказа заявка не создаётся");
+    "A ticket is not created for an unavailable order.");
 var owned = Context(Request(true));
 var first = await Tools(owned).CreateSupportTicketAsync("Доставка", default);
 var second = await Tools(owned).CreateSupportTicketAsync("Доставка", default);
-Check(first.Ticket?.Id == second.Ticket?.Id && tickets.Writes == 1, "повтор не создаёт второй тикет");
+Check(first.Ticket?.Id == second.Ticket?.Id && tickets.Writes == 1, "Repeating the same request does not create a second ticket.");
 
+// Keep Russian fixtures to exercise the demo language; diagnostics are English.
 owned.AddSources(await knowledge.SearchAsync("доставка", default));
-Check(ReplyComposer.Validate("Нет ссылки.", owned).Length > 0, "пропущена ссылка");
+Check(ReplyComposer.Validate("Нет ссылки.", owned).Length > 0, "A reply without a required citation is rejected.");
 Check(ReplyComposer.Validate("[invented#001] T-00000000000000000000000000000000", owned).Length > 0,
-    "выдуманные источник и тикет");
+    "Invented source and ticket IDs are rejected.");
 string valid = "Правило [support-delivery#001]. Заявка: " + first.Ticket!.Id;
-Check(ReplyComposer.Validate(valid, owned).Length == 0, "проверенный ответ проходит");
-Check(ReplyComposer.Finish("", owned, true).Answer.Contains(first.Ticket.Id), "fallback сохраняет номер");
+Check(ReplyComposer.Validate(valid, owned).Length == 0, "A reply with confirmed citations and a ticket ID passes validation.");
+Check(ReplyComposer.Finish("", owned, true).Answer.Contains(first.Ticket.Id), "The fallback preserves the created ticket ID.");
 
+// Exercise the normal path and the deliberately rejected first draft.
 foreach (bool retry in new[] { false, true })
 {
     var context = Context(Request(true, retry));
@@ -43,20 +46,21 @@ foreach (bool retry in new[] { false, true })
         "Правила [support-delivery#001]. Заявка: " + context.Ticket!.Ticket!.Id);
     var workflow = new SupportWorkflow(new ReplyComposer(model));
     var result = await workflow.RunAsync(context, Tools(context), default);
-    Check(!result.UsedFallback, "workflow имеет конечный результат");
-    Check(model.Calls == (retry ? 2 : 1), "учебный retry ограничен одной попыткой");
-    Check(result.Trace.Contains("workflow finish OK"), "finish графа выполнен");
+    Check(!result.UsedFallback, "The workflow produces a validated reply.");
+    Check(model.Calls == (retry ? 2 : 1), "Demo retry allows only one additional model call.");
+    Check(result.Trace.Contains("workflow finish OK"), "The workflow reaches the finish executor.");
 }
 var fallbackContext = Context(Request());
 var fallbackModel = new FakeModel(() => "Ответ без источников.");
 var fallbackReply = await new SupportWorkflow(new ReplyComposer(fallbackModel))
     .RunAsync(fallbackContext, Tools(fallbackContext), default);
-Check(fallbackReply.UsedFallback && fallbackModel.Calls == 2, "невалидный ответ после двух попыток -> fallback");
+Check(fallbackReply.UsedFallback && fallbackModel.Calls == 2, "Two invalid drafts result in a fallback.");
 var noOrder = Context(Request(orderId: null));
 var noOrderModel = new FakeModel(() => "Правила [support-delivery#001].");
 var general = await new SupportWorkflow(new ReplyComposer(noOrderModel)).RunAsync(noOrder, Tools(noOrder), default);
-Check(general.Order is null && !general.UsedFallback, "общий RAG-вопрос без заказа");
+Check(general.Order is null && !general.UsedFallback, "A general RAG question works without a selected order.");
 
+// Scripted Responses API items verify tool execution without a real model.
 var agentContext = Context(Request());
 var script = new ScriptModel([
     JsonNode.Parse("""{"status":"completed","output":[{"type":"function_call","call_id":"call-1","name":"GetOrderStatus","arguments":"{}"}]}""")!.AsObject(),
@@ -65,27 +69,30 @@ var script = new ScriptModel([
 ]);
 var agent = await new SupportAgent(script, new ReplyComposer(script))
     .RunAsync(agentContext, Tools(agentContext), default);
-Check(agentContext.Order is { Found: true }, "структурированный tool call исполняет C#");
+Check(agentContext.Order is { Found: true }, "A structured tool call executes the C# tool.");
 Check(script.LastInput!.Any(x => x["type"]?.GetValue<string>() == "function_call_output"),
-    "результат инструмента возвращается модели");
-Check(!agent.UsedFallback, "агент завершает ответ");
+    "The tool result is returned to the model.");
+Check(!agent.UsedFallback, "The agent produces a validated reply.");
 
+// The handler returns a fixture; no network request leaves this process.
 using var http = new HttpClient(new CaptureHandler(
     """{"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"OK"}]}]}"""))
     { BaseAddress = new Uri("https://fixture.invalid/v1/") };
 var api = new OpenAiApi(http, new("fixture-not-a-key", "gpt-5.4-mini", "text-embedding-3-small"));
 var response = await api.RespondAsync("test", [OpenAiApi.UserMessage("test")], SupportTools.Definitions(), default);
-Check(OpenAiApi.OutputText(response) == "OK", "парсер Responses API");
-Check(KnowledgeRepository.Split(new string('x', 1700)).Length == 2, "разбиение с перекрытием");
+Check(OpenAiApi.OutputText(response) == "OK", "The Responses API parser extracts output text.");
+Check(KnowledgeRepository.Split(new string('x', 1700)).Length == 2, "Knowledge splitting creates overlapping chunks.");
+// PostgreSQL vector text must remain valid under a non-English culture.
 var previousCulture = System.Globalization.CultureInfo.CurrentCulture;
 try
 {
     System.Globalization.CultureInfo.CurrentCulture = new("de-DE");
     Check(KnowledgeRepository.VectorText([0.1f, 0.2f]) == "[0.100000001,0.200000003]",
-        "вектор использует точку, независимо от локали");
+        "Vector formatting uses a decimal point regardless of culture.");
 }
 finally { System.Globalization.CultureInfo.CurrentCulture = previousCulture; }
 
+// A token cancelled before execution must stop the workflow.
 using var cancelled = new CancellationTokenSource();
 cancelled.Cancel();
 try
@@ -93,11 +100,11 @@ try
     var state = Context(Request());
     await new SupportWorkflow(new ReplyComposer(new FakeModel(() => "unused")))
         .RunAsync(state, Tools(state), cancelled.Token);
-    throw new InvalidOperationException("Отмена проигнорирована.");
+    throw new InvalidOperationException("Cancellation was ignored.");
 }
 catch (OperationCanceledException) { checks++; }
 
-Console.WriteLine($"OK: {checks} офлайн-проверок. Внешние API и PostgreSQL не вызывались.");
+Console.WriteLine($"OK: {checks} offline checks passed. No external APIs or PostgreSQL were called.");
 
 sealed class FakeKnowledge : IKnowledgeSearch
 {
