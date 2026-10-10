@@ -2,6 +2,20 @@ using eShop.SupportApi;
 using System.Net;
 using System.Text.Json.Nodes;
 
+if (args.Contains("--behavior-only", StringComparer.Ordinal))
+{
+    int behaviorChecks = await ModelBehaviorTests.RunAsync();
+    Console.WriteLine($"OK: {behaviorChecks} model-behavior checks passed. No external APIs or PostgreSQL were called.");
+    return;
+}
+
+if (args.Contains("--ticket-authorization-only", StringComparer.Ordinal))
+{
+    int authorizationChecks = await TicketAuthorizationTests.RunAsync();
+    Console.WriteLine($"OK: {authorizationChecks} ticket-authorization checks passed. No external APIs or PostgreSQL were called.");
+    return;
+}
+
 int checks = 0;
 void Check(bool condition, string message)
 {
@@ -41,13 +55,15 @@ Check(ReplyComposer.Finish("", owned, true).Answer.Contains(first.Ticket.Id), "T
 // Exercise the normal path and the deliberately rejected first draft.
 foreach (bool retry in new[] { false, true })
 {
-    var context = Context(Request(true, retry));
+    var context = Context(Request(true, retry) with
+        { Question = "Создай заявку по моему заказу." });
     var model = new FakeModel(() =>
-        "Правила [support-delivery#001]. Заявка: " + context.Ticket!.Ticket!.Id);
+        "Правила [support-delivery#001]. Заявка: " + context.Ticket!.Ticket!.Id,
+        needsTicket: true);
     var workflow = new SupportWorkflow(new ReplyComposer(model));
     var result = await workflow.RunAsync(context, Tools(context), default);
     Check(!result.UsedFallback, "The workflow produces a validated reply.");
-    Check(model.Calls == (retry ? 2 : 1), "Demo retry allows only one additional model call.");
+    Check(model.Calls == (retry ? 3 : 2), "Demo retry allows only one additional model call.");
     Check(result.Trace.Contains("workflow finish OK"), "The workflow reaches the finish executor.");
 }
 var fallbackContext = Context(Request());
@@ -61,7 +77,7 @@ var general = await new SupportWorkflow(new ReplyComposer(noOrderModel)).RunAsyn
 Check(general.Order is null && !general.UsedFallback, "A general RAG question works without a selected order.");
 
 // Scripted Responses API items verify tool execution without a real model.
-var agentContext = Context(Request());
+var agentContext = Context(Request() with { Mode = "agent" });
 var script = new ScriptModel([
     JsonNode.Parse("""{"status":"completed","output":[{"type":"function_call","call_id":"call-1","name":"GetOrderStatus","arguments":"{}"}]}""")!.AsObject(),
     JsonNode.Parse("""{"status":"completed","output":[{"type":"function_call","call_id":"call-2","name":"SearchKnowledge","arguments":"{\"query\":\"доставка\"}"}]}""")!.AsObject(),
@@ -104,6 +120,9 @@ try
 }
 catch (OperationCanceledException) { checks++; }
 
+checks += await TicketPolicyTests.RunAsync();
+checks += await TicketAuthorizationTests.RunAsync();
+checks += await ModelBehaviorTests.RunAsync();
 Console.WriteLine($"OK: {checks} offline checks passed. No external APIs or PostgreSQL were called.");
 
 sealed class FakeKnowledge : IKnowledgeSearch
@@ -133,15 +152,36 @@ sealed class FakeTickets : ITicketStore
         return Task.FromResult(value);
     }
 }
-sealed class FakeModel(Func<string> text) : IResponsesModel
+sealed class FakeModel(Func<string> text, bool needsTicket = false) : IResponsesModel
 {
     public int Calls { get; private set; }
     public Task<JsonObject> RespondAsync(string instructions, IReadOnlyList<JsonNode> input, JsonArray? tools, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         Calls++;
+        if (tools is { Count: 1 } &&
+            tools[0]?["name"]?.GetValue<string>() == TicketPolicy.DecisionFunction)
+        {
+            return Task.FromResult(Function(TicketPolicy.DecisionFunction,
+                new JsonObject
+                {
+                    ["needsTicket"] = needsTicket,
+                    ["reason"] = needsTicket ? "buyer_request" : "answered_by_policy"
+                }.ToJsonString()));
+        }
         return Task.FromResult(Text(text()));
     }
+    public static JsonObject Function(string name, string arguments) => new()
+    {
+        ["status"] = "completed",
+        ["output"] = new JsonArray(new JsonObject
+        {
+            ["type"] = "function_call",
+            ["call_id"] = "call-fixture",
+            ["name"] = name,
+            ["arguments"] = arguments
+        })
+    };
     public static JsonObject Text(string value) => new()
     {
         ["status"] = "completed",

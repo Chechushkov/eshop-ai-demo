@@ -134,7 +134,12 @@ public sealed record SupportAnswer(
     string[] Trace,
     bool UsedFallback,
     Guid? ConversationId = null,
-    SupportRequestMetrics? Metrics = null);
+    SupportRequestMetrics? Metrics = null,
+    SupportBehaviorInfo? Behavior = null);
+
+public sealed record SupportBehaviorInfo(
+    string[] AutoCompletedActions,
+    bool ReplyRecomposed);
 
 public sealed record SupportRequestMetrics(
     long ElapsedMs,

@@ -47,6 +47,8 @@ public sealed record TicketResult(
     SupportTicket? Ticket,
     string Message);
 
+public sealed record TicketDecision(bool NeedsTicket, string Reason);
+
 public sealed record SupportReply(
     string Answer,
     IReadOnlyList<KnowledgeHit> Sources,
@@ -55,7 +57,14 @@ public sealed record SupportReply(
     string[] Trace,
     bool UsedFallback,
     Guid? ConversationId = null,
-    SupportMetrics? Metrics = null);
+    SupportMetrics? Metrics = null,
+    SupportBehavior? Behavior = null);
+
+// Assigned by application code, never extracted from model text.
+// Null on older replies means these observations were not recorded.
+public sealed record SupportBehavior(
+    string[] AutoCompletedActions,
+    bool ReplyRecomposed);
 
 // Metrics for a single message.
 // A null token count means usage is unknown.
@@ -102,9 +111,12 @@ public sealed class RunContext(
 
     public OrderResult? Order { get; set; }
     public TicketResult? Ticket { get; set; }
+    public TicketDecision? TicketDecision { get; set; }
 
     public List<KnowledgeHit> Sources { get; } = [];
     public List<string> Trace { get; } = [];
+    public List<string> AutoCompletedActions { get; } = [];
+    public bool ReplyRecomposed { get; set; }
 
     public void Log(string step)
     {

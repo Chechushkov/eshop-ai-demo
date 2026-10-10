@@ -7,5 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Support.API\Support.API.csproj" />
+    <!-- Compile the production client contract without referencing the entire WebApp. -->
+    <Compile Include="../../src/WebApp/Services/SupportService.cs" Link="Client/SupportService.cs" />
   </ItemGroup>
 </Project>

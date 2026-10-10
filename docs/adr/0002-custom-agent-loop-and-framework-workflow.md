@@ -28,7 +28,8 @@ Keeping the loop visible makes protocol handling and model omissions inspectable
 [SupportWorkflow.cs](../../src/Support.API/SupportWorkflow.cs) uses
 `WorkflowBuilder`, typed `Executor` nodes and conditional edges from
 `Microsoft.Agents.AI.Workflows`. C# determines the route: read the order, retrieve
-rules, optionally create a ticket, compose, validate, then finish or retry once.
+rules, decide whether a ticket is needed, optionally create it, compose, validate,
+then finish or retry once.
 The model writes the reply and may rewrite a retrieval query; it does not choose
 the graph edges. The runner consumes events and requires exactly one final reply.
 
@@ -36,9 +37,10 @@ Both modes use the same `RunContext`, guarded `SupportTools` and `ReplyComposer`
 The authority boundary remains the one described in
 [ADR 0001](0001-model-proposes-code-decides.md).
 
-For the current baseline, C# completes missing agent retrieval and selected-order
-reads. `AllowTicket=true` also requests ticket creation, which C# completes if the
-agent omits it. Evaluation must distinguish model actions from C# completion.
+At `baseline-always-create`, C# completed missing agent retrieval, selected-order
+reads and a permitted ticket action. [ADR 0004](0004-ticket-permission-and-necessity.md)
+removes ticket completion and adds a workflow decision. Retrieval and order reads
+remain mandatory. Evaluation must distinguish model actions from C# completion.
 
 Workflow execution is in process. PostgreSQL stores conversation history and
 completed replies; this implementation does not persist graph checkpoints or
@@ -62,14 +64,14 @@ business rules. We maintain two orchestration implementations and own the
 agent's provider-specific JSON handling. Framework events do not automatically
 give us durable execution or prove business correctness.
 
-The 23 offline checks verify selected paths with fake dependencies. They do not
-establish real-model quality or a performance advantage for either mode.
+The baseline's 23 offline checks verify selected paths with fake dependencies.
+They do not establish real-model quality or a performance advantage for either mode.
 
 ## Review trigger
 
-After preserving the baseline, evaluate the planned permission-only ticket
-policy. Measure final outcomes, C# completion, repairs, latency and tokens.
-Use those results to decide whether both modes remain useful or orchestration
+Evaluate the permission-only ticket policy introduced by ADR 0004 against the
+preserved baseline. Measure final outcomes, C# completion, repairs, latency and
+tokens. Use those results to decide whether both modes remain useful or orchestration
 should be consolidated.
 
 ## Implementation references

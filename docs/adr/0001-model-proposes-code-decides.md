@@ -36,8 +36,10 @@ repeating completed work; ticket uniqueness protects writes after interrupted
 processing. Matching question text alone is not a retry.
 
 For new requests, C# completes missing retrieval and selected-order reads.
-Currently, `AllowTicket=true` also requests ticket creation: the agent completes
-an omitted action through the guarded tool, and the workflow uses graph edges.
+At the `baseline-always-create` tag, `AllowTicket=true` also requested ticket
+creation: the agent completed an omitted action and the workflow used graph edges.
+The permission-only policy in [ADR 0004](0004-ticket-permission-and-necessity.md)
+updates ticket selection while retaining this authority boundary.
 
 History interprets follow-ups; fresh requests reread order facts and use the
 current permission flag. Replays return the original snapshot. Known ticket IDs
@@ -66,12 +68,12 @@ an Ordering.API call before writing. C# completion can hide model omissions;
 evaluation must separate final success from model behavior. These guards do not
 prevent every injection effect on search, summaries or wording.
 
-## Planned ticket-policy change
+## Ticket-policy evolution
 
-Planned, not implemented: `AllowTicket` becomes permission; the model decides
-whether a ticket is needed. Ownership, current-message permission and
-idempotency checks remain mandatory. Preserve the current baseline as a tag and
-measure unnecessary and missing tickets separately.
+The initial behavior is preserved by `baseline-always-create`. With ADR 0004,
+`AllowTicket` is permission and the model decides whether a ticket is needed.
+Ownership, current-message permission and idempotency checks remain mandatory.
+Evaluation must measure unnecessary and missing tickets separately.
 
 ## Implementation references
 

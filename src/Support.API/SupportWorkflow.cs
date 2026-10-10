@@ -13,6 +13,7 @@ public sealed class SupportWorkflow(ReplyComposer composer)
 
         var load = new LoadOrder(tools, state);
         var retrieve = new RetrieveRules(tools, state, composer);
+        var decide = new DecideTicket(composer, state);
         var ticket = new CreateTicket(tools, state);
         var reply = new ComposeReply(composer, state);
         var validate = new ValidateReply(state);
@@ -21,20 +22,23 @@ public sealed class SupportWorkflow(ReplyComposer composer)
 
         var graph = new WorkflowBuilder(load)
             .AddEdge(load, retrieve)
+            .AddEdge(retrieve, decide)
 
             .AddEdge<SupportRequest>(
-                retrieve,
+                decide,
                 ticket,
                 condition: _ =>
                     state.Request.AllowTicket &&
-                    state.Order is { Found: true })
+                    state.Order is { Found: true, Order: not null } &&
+                    state.TicketDecision is { NeedsTicket: true })
 
             .AddEdge<SupportRequest>(
-                retrieve,
+                decide,
                 reply,
                 condition: _ =>
                     !state.Request.AllowTicket ||
-                    state.Order is not { Found: true })
+                    state.Order is not { Found: true, Order: not null } ||
+                    state.TicketDecision is not { NeedsTicket: true })
 
             .AddEdge(ticket, reply)
             .AddEdge(reply, validate)
@@ -159,6 +163,24 @@ public sealed class SupportWorkflow(ReplyComposer composer)
         }
     }
 
+    private sealed class DecideTicket(ReplyComposer composer, RunContext state)
+        : Executor<SupportRequest, SupportRequest>("decide_ticket")
+    {
+        public override async ValueTask<SupportRequest> HandleAsync(
+            SupportRequest request,
+            IWorkflowContext context,
+            CancellationToken cancellationToken = default)
+        {
+            state.Log("workflow decide_ticket");
+            state.TicketDecision = await composer.DecideTicketAsync(
+                state, cancellationToken);
+            state.Log(
+                $"workflow ticket_decision needed={state.TicketDecision.NeedsTicket} " +
+                $"reason={state.TicketDecision.Reason}");
+            return request;
+        }
+    }
+
     private sealed class CreateTicket(
         SupportTools tools,
         RunContext state)
@@ -248,6 +270,7 @@ public sealed class SupportWorkflow(ReplyComposer composer)
             CancellationToken cancellationToken = default)
         {
             state.Log("workflow retry_reply attempt=2");
+            state.ReplyRecomposed = true;
 
             string text = await composer.ComposeAsync(
                 state,

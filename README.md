@@ -13,7 +13,7 @@ An educational AI customer-support service integrated into dotnet/eShop:
 - Tools for knowledge search, order status and support-ticket creation, with
   permission and order-ownership checks enforced in C#.
 - Persistent conversations and replay of saved requests by identifier.
-- Execution traces, per-message timing and token metrics, and 23 offline checks
+- Execution traces, per-message timing and token metrics, and 105 offline checks
   automated in GitHub Actions.
 
 Start with [Support.API](src/Support.API), the
@@ -26,6 +26,12 @@ Read the [support architecture](docs/architecture.md) and the decisions on
 [tool authority](docs/adr/0001-model-proposes-code-decides.md),
 [agent and workflow orchestration](docs/adr/0002-custom-agent-loop-and-framework-workflow.md),
 and [model integration](docs/adr/0003-direct-responses-api.md).
+The [ticket policy](docs/adr/0004-ticket-permission-and-necessity.md) separates
+buyer permission from the model's decision that a ticket is needed.
+
+The [initial evaluation scenarios](eval/README.md) define ten real-model cases
+for agent and workflow comparison. Their Python validator checks the dataset
+offline; a paid API runner and semantic grading are subsequent steps.
 
 Engineering comments, diagnostics, test output and documentation use English.
 See the [language conventions](CONTRIBUTING.md#language-conventions-for-this-fork);
@@ -81,9 +87,9 @@ Then ask a follow-up in the same conversation:
 > А когда вернут деньги?
 
 For the order demo, create an order through the storefront, select it on the
-support page and ask to check its status. Enable ticket creation when you want
-to save a demo support ticket. Inspect the sources, execution trace and metrics
-shown with the reply. Use "Repeat last request" to replay the saved reply.
+support page and ask to check its status. Enable ticket permission when you allow
+the assistant to save a demo support ticket if needed. Inspect the sources,
+execution trace and metrics shown with the reply. Use "Repeat last request" to replay the saved reply.
 
 For development on a remote server, forward the browser-facing ports
 `5045` (WebApp), `5223` (Identity.API) and `18848` (Aspire dashboard) through SSH
@@ -92,18 +98,22 @@ The current HTTP and callback settings are for local or tunneled development.
 
 ### Current behavior and verification scope
 
-- For a valid order owned by the signed-in buyer, enabling `AllowTicket`
-  currently requests ticket creation in both modes. The agent completes this
-  action in C# if the model omits it. Model-based ticket-necessity decisions
-  are planned.
+- `AllowTicket` grants permission for the current message. The agent chooses
+  whether to call `CreateSupportTicket`; the workflow uses a model decision
+  before its ticket branch. C# still completes missing agent retrieval and order
+  reads, but does not complete ticket creation. The `baseline-always-create` tag
+  preserves the previous behavior for comparison.
 - Tickets are stored in `support_tickets` in the `knowledge` database and do not
   contact an external support service. Store policies are fictional demo rules.
 - Repeating a saved request with the same `conversationId`, `requestId` and
   payload returns its saved reply. Reusing that identifier with different
   parameters returns HTTP 409. Matching question text alone is not a replay.
+- [Structured behavior observations](docs/model-behavior.md) record application
+  completion and reply recomposition. Old replies retain unknown observations;
+  replay preserves the original generation data.
 - Reply validation checks retrieved source IDs and known ticket numbers.
   Invalid drafts get one repair attempt before a deterministic fallback.
-- The 23 offline checks use fake dependencies. They verify selected code paths;
+- The 105 offline checks use fake dependencies. They verify selected code paths;
   real-model quality and PostgreSQL integration require separate evaluation.
 
 Run the support checks without an API key or a running application:
@@ -115,8 +125,23 @@ dotnet run --project tests/Support.SelfTests/Support.SelfTests.csproj --configur
 Expected final output:
 
 ```text
-OK: 23 offline checks passed. No external APIs or PostgreSQL were called.
+OK: 105 offline checks passed. No external APIs or PostgreSQL were called.
 ```
+
+Run only the ticket-permission regression scenarios:
+
+```bash
+dotnet run --project tests/Support.SelfTests --no-build --no-restore -- \
+  --ticket-authorization-only
+```
+
+These checks use the production support client, JSON request contract,
+conversation coordinator, agent and tool guards with an in-process HTTP handler.
+They verify that missing current permission prevents every call to the ticket store, including repeated model
+attempts, forged tool arguments and previous permission in conversation history.
+A positive control verifies that a permitted request can reach the store.
+Blazor interaction, authentication middleware, replay persistence and PostgreSQL
+are outside this test's scope.
 
 ![eShop Reference Application architecture diagram](img/eshop_architecture.png)
 

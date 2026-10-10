@@ -96,6 +96,7 @@
 
         <details>
             <summary>Replay trace</summary>
+            @BehaviorView(replayed.Behavior)
             <pre style="white-space: pre-wrap;">@string.Join("\n", replayed.Trace)</pre>
         </details>
     }
@@ -145,6 +146,7 @@
 
             <details style="margin-top: 1rem;">
                 <summary>Execution trace</summary>
+                @BehaviorView(turn.Reply.Behavior)
                 <pre style="white-space: pre-wrap;">@string.Join("\n", turn.Reply.Trace)</pre>
             </details>
         </article>
@@ -176,7 +178,7 @@
             <label>
                 <input type="checkbox" @bind="allowTicket"
                        disabled="@(busy || orderId is null)" />
-                Create a ticket for the selected order with this message
+                Allow a ticket for the selected order if needed
             </label>
         </p>
 
@@ -256,6 +258,27 @@
     private SupportAnswer? replayed;
 
     private CancellationTokenSource lifetime = new();
+
+    private RenderFragment BehaviorView(SupportBehaviorInfo? behavior) =>
+        @<div>
+            @if (behavior is null)
+            {
+                <p>Behavior data was not recorded for this saved reply.</p>
+            }
+            else
+            {
+                <p>
+                    <strong>Application-completed reads:</strong>
+                    @(behavior.AutoCompletedActions.Length == 0
+                        ? "None" : string.Join(", ", behavior.AutoCompletedActions))
+                </p>
+                <p>
+                    <strong>Reply recomposed:</strong>
+                    @(behavior.ReplyRecomposed ? "Yes" : "No")
+                </p>
+                <p>These observations describe the original reply generation.</p>
+            }
+        </div>;
 
     private RenderFragment MetricsView(SupportRequestMetrics metrics) =>
         @<details style="margin-top: 1rem;">

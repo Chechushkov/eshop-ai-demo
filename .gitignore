@@ -503,3 +503,8 @@ $RECYCLE.BIN/
 artifacts/
 **/bin/
 **/obj/
+
+# Local support evaluation fixtures and raw results
+/eval/fixtures.local.json
+/eval/results/
+/eval/__pycache__/

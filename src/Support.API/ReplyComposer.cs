@@ -38,7 +38,9 @@ public sealed class ReplyComposer(IResponsesModel model)
             .KnownTickets(context.History)
             .Select(x => new { x.Id, x.OrderId });
 
-        return Instructions +
+        return Instructions + "\n\n" + TicketPolicy.Instructions +
+            "\nIf AllowTicket=true and no new ticket was created, include this exact sentence: " +
+            "\"" + TicketPolicy.NoTicketCreated + "\"" +
             "\n\nРазрешённые ID источников на текущем шаге: " +
             JsonSerializer.Serialize(sourceIds) +
             "\nЛюбая ссылка [ID] должна точно совпадать с одним из этих ID. " +
@@ -65,6 +67,7 @@ public sealed class ReplyComposer(IResponsesModel model)
             context.Request.OrderId,
             context.Order,
             context.Ticket,
+            context.TicketDecision,
 
             KnownTickets =
                 ConversationMemory.KnownTickets(context.History),
@@ -90,6 +93,42 @@ public sealed class ReplyComposer(IResponsesModel model)
             ct);
 
         return OpenAiApi.OutputText(response);
+    }
+
+    public async Task<TicketDecision> DecideTicketAsync(
+        RunContext context,
+        CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        if (!context.Request.AllowTicket)
+            return new(false, "permission_missing");
+
+        if (context.Order is not { Found: true, Order: not null })
+            return new(false, "order_unavailable");
+
+        var input = ConversationMemory.Messages(context.History);
+        input.Add(OpenAiApi.UserMessage(JsonSerializer.Serialize(new
+        {
+            context.Request.Question,
+            context.Request.AllowTicket,
+            context.Order,
+            context.Sources,
+            KnownTickets = ConversationMemory.KnownTickets(context.History)
+        })));
+
+        var response = await model.RespondAsync(
+            TicketPolicy.Instructions + "\n" + """
+                Return exactly one DecideSupportTicket function call, without calling any other tool.
+                Set needsTicket=true only for buyer_request or human_action_required.
+                Set needsTicket=false for answered_by_policy or insufficient_context.
+                This is a decision only. Do not claim that a ticket has been created.
+                """,
+            input,
+            TicketPolicy.DecisionTools(),
+            ct);
+
+        return TicketPolicy.ParseDecision(response);
     }
 
     public async Task<string> ResolveRetrievalQueryAsync(
@@ -222,6 +261,20 @@ public sealed class ReplyComposer(IResponsesModel model)
                 "Include the exact ID of the created ticket: " + expected);
         }
 
+        bool reportsNoTicket = text.Contains(
+            TicketPolicy.NoTicketCreated, StringComparison.Ordinal);
+
+        if (context.Request.AllowTicket && expected is null && !reportsNoTicket)
+        {
+            errors.Add(
+                "Explicitly state that no new ticket was created using the required status sentence.");
+        }
+
+        if (expected is not null && reportsNoTicket)
+        {
+            errors.Add("A ticket was created; do not claim that no new ticket was created.");
+        }
+
         // Also allow confirmed ticket IDs from conversation history.
         var knownTickets = ConversationMemory
             .KnownTickets(context.History)
@@ -282,7 +335,9 @@ public sealed class ReplyComposer(IResponsesModel model)
             else
             {
                 lines.Add(
-                    "Новая заявка в этом сообщении не создавалась.");
+                    context.Request.AllowTicket
+                        ? TicketPolicy.NoTicketCreated
+                        : "Новая заявка в этом сообщении не создавалась.");
             }
 
             if (context.Sources.Count == 0)
@@ -304,6 +359,9 @@ public sealed class ReplyComposer(IResponsesModel model)
             context.Ticket,
             context.Trace.ToArray(),
             fallback,
-            context.Request.ConversationId);
+            context.Request.ConversationId,
+            Behavior: new SupportBehavior(
+                context.AutoCompletedActions.ToArray(),
+                context.ReplyRecomposed));
     }
 }

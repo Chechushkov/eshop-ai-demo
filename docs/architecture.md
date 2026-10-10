@@ -4,6 +4,8 @@ This document describes the current support implementation. Both modes share
 authentication, conversation persistence, guarded tools and reply validation.
 The diagram summarizes `POST /api/support/ask`; agent and workflow routing are
 described in [ADR 0002](adr/0002-custom-agent-loop-and-framework-workflow.md).
+Ticket necessity is described in
+[ADR 0004](adr/0004-ticket-permission-and-necessity.md).
 
 ## Request path
 
@@ -73,18 +75,23 @@ not implemented.
 
 ## Current behavior and limits
 
-- `AllowTicket=true` currently requests ticket creation for an owned order. The
-  agent completes an omitted action in C#; the workflow selects a graph branch.
-  Permission-only ticket decisions are planned, not implemented.
+- `AllowTicket=true` permits a ticket for an owned order if needed. The agent
+  selects the creation tool; the workflow adds a model decision before its ticket
+  branch. C# completes missing retrieval and order reads, but not ticket writes.
+  Ineligible workflows skip ticket classification. Invalid decisions fail before
+  a write. Permitted requests without a new ticket must report that outcome.
 - RAG searches eight demo documents using cosine distance, up to three chunks
   and a minimum score of 0.30. Embeddings have 1536 dimensions. These defaults
   still need retrieval evaluation.
 - Validation checks source IDs and confirmed ticket numbers. Invalid drafts get
   one repair attempt, then a deterministic fallback. Valid citations do not
   establish semantic correctness.
+- [Structured behavior](model-behavior.md) snapshots application completion and
+  reply recomposition. Replay retains these original-generation observations;
+  older replies without the object keep unknown data.
 - Preparation timing includes history loading and processing, but stops before
   reply persistence. Missing usage remains unknown; replay reports its own metrics.
-- The [23 offline checks](../tests/Support.SelfTests/Program.cs) use fake
+- The [105 offline checks](../tests/Support.SelfTests/Program.cs) use fake
   dependencies. Real-model quality and PostgreSQL integration need separate checks.
 - Model integration remains provider-specific; see
   [ADR 0003](adr/0003-direct-responses-api.md).

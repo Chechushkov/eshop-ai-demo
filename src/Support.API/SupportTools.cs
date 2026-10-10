@@ -69,7 +69,7 @@ public sealed class SupportTools(IKnowledgeSearch knowledge, IOrderReader orders
            "strict":true,
            "parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false}},
           {"type":"function","name":"CreateSupportTicket",
-           "description":"Создать заявку по выбранному заказу. C# проверяет владение и явное разрешение покупателя.",
+           "description":"Создать заявку по выбранному заказу, только если покупатель явно просит её или нужна помощь человека. AllowTicket — разрешение, не команда. C# проверяет владение и текущее разрешение.",
            "strict":true,
            "parameters":{"type":"object","properties":{"summary":{"type":"string"}},
                          "required":["summary"],"additionalProperties":false}}

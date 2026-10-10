@@ -95,6 +95,7 @@ public sealed class SupportAgent(
                 await composer.ResolveRetrievalQueryAsync(context, ct);
 
             await tools.SearchKnowledgeAsync(query, ct);
+            context.AutoCompletedActions.Add("SearchKnowledge");
 
             factsAdded = true;
         }
@@ -108,27 +109,13 @@ public sealed class SupportAgent(
                 "model did not read selected order");
 
             await tools.GetOrderStatusAsync(ct);
+            context.AutoCompletedActions.Add("GetOrderStatus");
 
             factsAdded = true;
         }
 
-        // Use permission from the current message only.
-        // SupportTools performs the additional ownership
-        // and requestId checks.
-        if (context.Request.AllowTicket &&
-            context.Ticket is null)
-        {
-            context.Log(
-                "agent C# invokes CreateSupportTicket: " +
-                "allowed request was not handled");
-
-            string summary = context.Request.Question[
-                ..Math.Min(1000, context.Request.Question.Length)];
-
-            await tools.CreateSupportTicketAsync(summary, ct);
-
-            factsAdded = true;
-        }
+        // Ticket creation is a model-selected action, not a mandatory completion.
+        // SupportTools still checks current permission, ownership and idempotency.
 
         var errors = ReplyComposer.Validate(text, context);
 
@@ -138,6 +125,7 @@ public sealed class SupportAgent(
 
         if (!completed || factsAdded || errors.Length > 0)
         {
+            context.ReplyRecomposed = true;
             context.Log("agent repair");
 
             context.Log(
