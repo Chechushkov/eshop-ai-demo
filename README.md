@@ -30,8 +30,10 @@ The [ticket policy](docs/adr/0004-ticket-permission-and-necessity.md) separates
 buyer permission from the model's decision that a ticket is needed.
 
 The [initial evaluation scenarios](eval/README.md) define ten real-model cases
-for agent and workflow comparison. Their Python validator checks the dataset
-offline; a paid API runner and semantic grading are subsequent steps.
+for agent and workflow comparison. The [evaluation runner](eval/RUNNING.md)
+is a .NET console project with MSTest unit tests. It uses buyer tokens, saves
+replies and metrics, and stops new requests based on an estimated run budget.
+Offline validation is separate from real-model and manual semantic assessment.
 
 Engineering comments, diagnostics, test output and documentation use English.
 See the [language conventions](CONTRIBUTING.md#language-conventions-for-this-fork);

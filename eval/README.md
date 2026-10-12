@@ -5,10 +5,13 @@ They compare the custom agent and framework workflow using the same questions,
 order fixtures and current ticket permissions. The technical contract and rubrics
 use English; customer questions stay Russian, matching the current demo.
 
-This directory currently contains a dataset, an offline contract validator and
-its regression checks. It does **not** contain a paid API runner or a semantic
-answer grader. A successful validation means the dataset is internally
-consistent; it does not mean a model passed the scenarios.
+This directory contains the dataset and evaluation documentation. The authenticated
+API runner is the C# project `tools/Support.Evaluation`; its offline regression
+tests are in `tests/Support.Evaluation.UnitTests` and use MSTest, matching the
+existing eShop test infrastructure. See [running the evaluation](RUNNING.md) for login, ownership checks,
+request limits, cost estimates and manual review. A successful contract validation
+means the dataset is internally consistent; it does not mean a model passed the
+scenarios. Semantic grading remains a separate manual step.
 
 ## Why this is separate from self-tests
 
@@ -77,11 +80,11 @@ instead of treating every trace entry as model success or a database write.
 
 ## Validate without API calls
 
-Run from the repository root. Only the Python standard library is used:
+Run from the repository root using .NET 10:
 
 ```bash
-python3 eval/validate_scenarios.py
-python3 -m unittest discover -s eval -p 'test_*.py' -v
+dotnet run --project tools/Support.Evaluation -- validate
+dotnet test --project tests/Support.Evaluation.UnitTests
 ```
 
 Expected validator output:
@@ -95,8 +98,11 @@ Order fixtures were not checked.
 The regression checks reject contradictory write permissions, foreign-order
 writes, nonexistent source IDs, duplicated scenario IDs, absent setup history,
 duplicate JSON keys and invalid local fixture mappings. They are separate from
-the C# self-test count. These Python checks currently run manually, not in the
-existing Support self-tests workflow.
+the C# self-test count. The Support evaluation offline workflow runs these checks,
+runner regressions and an Identity.API build without paid API calls. The unit
+tests use in-memory dependencies and HTTP handlers; no API keys, running eShop
+instance or database are required. Their fixture files are copied to the test
+output directory, so the tests do not depend on a particular working directory.
 
 ## Prepare order fixtures
 
@@ -119,7 +125,7 @@ save demo tickets in the local support table.
 Validate the local mapping after editing it:
 
 ```bash
-python3 eval/validate_scenarios.py --fixtures eval/fixtures.local.json
+dotnet run --project tools/Support.Evaluation -- validate --fixtures eval/fixtures.local.json
 ```
 
 This checks ID types and distinctness, not authentication, existence or ownership.
@@ -128,12 +134,11 @@ Do not fix an expected status to `Paid`: compare the answer with the trusted
 order read for that run. Order status can change between messages.
 
 Local fixture mappings and raw results are excluded from Git. Keep credentials
-out of both files; a future runner will receive the buyer token separately.
+out of both files; the runner reads buyer tokens from separate private files.
 
 ## Run protocol
 
-The next implementation step is an API runner for `/api/support/ask`. Until it
-exists, these are the requirements for a manual run or that runner:
+The API runner follows this protocol for `/api/support/ask`:
 
 1. Confirm the new `Behavior` fields are present in fresh replies and prepare the
    two verified order fixtures. Record the commit, model, embedding model and
@@ -177,6 +182,9 @@ only after manual calibration and an explicit run budget with verified pricing.
 | `solved` | All required result and semantic checks pass; `UsedFallback=false` |
 | `solved_via_fallback` | The same checks pass; `UsedFallback=true` |
 | `unsolved` | Any required check fails, or the target request errors |
+
+The runner reports `pending_review` until semantic assessment and the generated
+ticket-row SQL checks are recorded. Automatic checks alone cannot assign `solved`.
 
 Report `invalid_setup` separately from evaluated target outcomes. An HTTP 200,
 the application's own validator accepting a draft, or a permitted tool call

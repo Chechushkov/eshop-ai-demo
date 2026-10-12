@@ -1,0 +1,12 @@
+{
+  "checked_at": "2026-10-10",
+  "model": "gpt-5.4-mini",
+  "embedding_model": "text-embedding-3-small",
+  "input_usd_per_million": "0.75",
+  "output_usd_per_million": "4.50",
+  "embedding_usd_per_million": "0.02",
+  "sources": [
+    "https://developers.openai.com/api/docs/models/gpt-5.4-mini",
+    "https://developers.openai.com/api/docs/models/text-embedding-3-small"
+  ]
+}

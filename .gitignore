@@ -507,4 +507,5 @@ artifacts/
 # Local support evaluation fixtures and raw results
 /eval/fixtures.local.json
 /eval/results/
-/eval/__pycache__/
+/eval/*.token.local.json
+/eval/prices.local.json

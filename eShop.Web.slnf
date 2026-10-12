@@ -28,7 +28,9 @@
       "tests\\Webhooks.FunctionalTests\\Webhooks.FunctionalTests.csproj",
       "tests\\eShop.AppHost.UnitTests\\eShop.AppHost.UnitTests.csproj",
       "src\\Support.API\\Support.API.csproj",
-      "tests\\Support.SelfTests\\Support.SelfTests.csproj"
+      "tests\\Support.SelfTests\\Support.SelfTests.csproj",
+      "tools\\Support.Evaluation\\Support.Evaluation.csproj",
+      "tests\\Support.Evaluation.UnitTests\\Support.Evaluation.UnitTests.csproj"
     ]
   }
 }

@@ -1,0 +1,16 @@
+<Project Sdk="MSTest.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsPublishable>false</IsPublishable>
+    <TestingExtensionsProfile>None</TestingExtensionsProfile>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\tools\Support.Evaluation\Support.Evaluation.csproj" />
+    <Content Include="..\..\eval\scenarios.jsonl" Link="TestData\eval\scenarios.jsonl" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\eval\prices.json" Link="TestData\eval\prices.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\src\Support.API\Knowledge\*.md" Link="TestData\src\Support.API\Knowledge\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

@@ -46,9 +46,10 @@
         }
 
         // client want to access resources (aka scopes)
-        public static IEnumerable<Client> GetClients(IConfiguration configuration)
+        public static IEnumerable<Client> GetClients(
+            IConfiguration configuration, bool enableSupportEvaluation = false)
         {
-            return new List<Client>
+            var clients = new List<Client>
             {
                 new Client
                 {
@@ -196,6 +197,28 @@
                     }
                 }
             };
+
+            // A public CLI client for the development evaluation runner.
+            // The host enables it only when its environment is Development.
+            if (enableSupportEvaluation)
+            {
+                clients.Add(new Client
+                {
+                    ClientId = "support-eval",
+                    ClientName = "Support evaluation (development)",
+                    AllowedGrantTypes = GrantTypes.Code,
+                    RequireClientSecret = false,
+                    RequirePkce = true,
+                    AllowPlainTextPkce = false,
+                    AllowAccessTokensViaBrowser = false,
+                    RequireConsent = false,
+                    RedirectUris = { "http://127.0.0.1:8765/callback" },
+                    AllowedScopes = { "orders" },
+                    AccessTokenLifetime = 3600
+                });
+            }
+
+            return clients;
         }
     }
 }

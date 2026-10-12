@@ -1,0 +1,66 @@
+name: Support evaluation offline checks
+
+on:
+  push:
+    paths:
+      - '.github/workflows/support-eval-offline.yml'
+      - 'tools/Support.Evaluation/**'
+      - 'tests/Support.Evaluation.UnitTests/**'
+      - 'tests/Directory.Build.*'
+      - 'eval/**'
+      - 'src/Identity.API/**'
+      - 'src/Support.API/Knowledge/**'
+      - 'src/eShop.ServiceDefaults/**'
+      - 'Directory.Build.*'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'eShop.slnx'
+      - 'eShop.Web.slnf'
+      - 'NuGet.config'
+  pull_request:
+    paths:
+      - '.github/workflows/support-eval-offline.yml'
+      - 'tools/Support.Evaluation/**'
+      - 'tests/Support.Evaluation.UnitTests/**'
+      - 'tests/Directory.Build.*'
+      - 'eval/**'
+      - 'src/Identity.API/**'
+      - 'src/Support.API/Knowledge/**'
+      - 'src/eShop.ServiceDefaults/**'
+      - 'Directory.Build.*'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'eShop.slnx'
+      - 'eShop.Web.slnf'
+      - 'NuGet.config'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Restore evaluation tests
+        run: dotnet restore tests/Support.Evaluation.UnitTests/Support.Evaluation.UnitTests.csproj
+      - name: Build evaluation tests and runner
+        run: dotnet build tests/Support.Evaluation.UnitTests/Support.Evaluation.UnitTests.csproj --configuration Release --no-restore
+      - name: Validate the dataset without API calls
+        run: dotnet run --project tools/Support.Evaluation --configuration Release --no-build --no-restore -- validate
+      - name: Run MSTest offline tests
+        run: dotnet test --project tests/Support.Evaluation.UnitTests --configuration Release --no-build --no-restore --minimum-expected-tests 38
+      - name: Restore Identity.API
+        run: dotnet restore src/Identity.API/Identity.API.csproj
+      - name: Build Identity.API
+        run: dotnet build src/Identity.API/Identity.API.csproj --configuration Release --no-restore
