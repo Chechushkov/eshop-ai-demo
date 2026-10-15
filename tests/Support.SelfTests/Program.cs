@@ -2,6 +2,13 @@ using eShop.SupportApi;
 using System.Net;
 using System.Text.Json.Nodes;
 
+if (args.Contains("--retrieval-only", StringComparer.Ordinal))
+{
+    int retrievalChecks = await KnowledgeRetrievalTests.RunAsync();
+    Console.WriteLine($"OK: {retrievalChecks} retrieval checks passed. No external APIs or PostgreSQL were called.");
+    return;
+}
+
 if (args.Contains("--behavior-only", StringComparer.Ordinal))
 {
     int behaviorChecks = await ModelBehaviorTests.RunAsync();
@@ -123,6 +130,7 @@ catch (OperationCanceledException) { checks++; }
 checks += await TicketPolicyTests.RunAsync();
 checks += await TicketAuthorizationTests.RunAsync();
 checks += await ModelBehaviorTests.RunAsync();
+checks += await KnowledgeRetrievalTests.RunAsync();
 Console.WriteLine($"OK: {checks} offline checks passed. No external APIs or PostgreSQL were called.");
 
 sealed class FakeKnowledge : IKnowledgeSearch

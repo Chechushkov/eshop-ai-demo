@@ -10,10 +10,30 @@ public sealed class SupportTools(IKnowledgeSearch knowledge, IOrderReader orders
 {
     public async Task<IReadOnlyList<KnowledgeHit>> SearchKnowledgeAsync(string query, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         context.Log("tool SearchKnowledge");
-        if (string.IsNullOrWhiteSpace(query) || query.Length > 2000)
-            throw new ArgumentException("The search query must contain 1 to 2000 characters.");
-        var hits = await knowledge.SearchAsync(query, ct);
+        var queries = KnowledgeQueryPlanner.Build(query);
+        context.Log($"rag query_plan queries={queries.Count}");
+
+        var candidates = new List<KnowledgeHit>();
+        for (int index = 0; index < queries.Count; index++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var found = await knowledge.SearchAsync(queries[index], ct);
+            candidates.AddRange(found);
+            context.Log($"rag query {index + 1}/{queries.Count} hits={found.Count}");
+        }
+
+        ct.ThrowIfCancellationRequested();
+
+        // Preserve each question's results instead of truncating the union to three.
+        // Duplicate chunks keep their highest observed similarity score.
+        var hits = candidates
+            .GroupBy(hit => hit.Id, StringComparer.Ordinal)
+            .Select(group => group.MaxBy(hit => hit.Score)!)
+            .OrderByDescending(hit => hit.Score)
+            .ThenBy(hit => hit.Id, StringComparer.Ordinal)
+            .ToArray();
         context.AddSources(hits);
         return hits;
     }
