@@ -117,6 +117,8 @@ public sealed class RunContext(
     public List<string> Trace { get; } = [];
     public List<string> AutoCompletedActions { get; } = [];
     public bool ReplyRecomposed { get; set; }
+    public bool KnowledgeSearchCompleted { get; set; }
+    public bool HasNoRelevantKnowledge => KnowledgeSearchCompleted && Sources.Count == 0;
 
     public void Log(string step)
     {
@@ -160,6 +162,16 @@ public interface IKnowledgeSearch
         CancellationToken ct);
 }
 
+public interface IKnowledgeRelevance
+{
+    Task<IReadOnlyList<KnowledgeHit>> SelectAsync(
+        string question,
+        string searchQuery,
+        IReadOnlyList<KnowledgeHit> candidates,
+        IReadOnlyList<ConversationTurn> history,
+        CancellationToken ct);
+}
+
 public interface IOrderReader
 {
     Task<OrderResult> GetAsync(
@@ -180,11 +192,14 @@ public interface ITicketStore
 
 public interface IResponsesModel
 {
+    // Null allows the agent to answer or choose a tool. Decision steps name the
+    // required function explicitly; a prompt alone does not enforce a tool call.
     Task<JsonObject> RespondAsync(
         string instructions,
         IReadOnlyList<JsonNode> input,
         JsonArray? tools,
-        CancellationToken ct);
+        CancellationToken ct,
+        string? requiredFunction = null);
 }
 
 public sealed record ReplyDraft(

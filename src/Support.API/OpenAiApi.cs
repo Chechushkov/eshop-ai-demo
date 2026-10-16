@@ -14,8 +14,19 @@ public sealed class OpenAiApi(
         string instructions,
         IReadOnlyList<JsonNode> input,
         JsonArray? tools,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? requiredFunction = null)
     {
+        if (requiredFunction is not null &&
+            (string.IsNullOrWhiteSpace(requiredFunction) ||
+             tools is null || tools.Count(tool =>
+                 tool?["type"]?.GetValue<string>() == "function" &&
+                 tool?["name"]?.GetValue<string>() == requiredFunction) != 1))
+        {
+            throw new ArgumentException(
+                "A required function must be defined exactly once in tools.", nameof(requiredFunction));
+        }
+
         var body = new JsonObject
         {
             ["model"] = settings.Model,
@@ -43,7 +54,9 @@ public sealed class OpenAiApi(
         {
             body["tools"] = tools.DeepClone();
             body["parallel_tool_calls"] = false;
-            body["tool_choice"] = "auto";
+            body["tool_choice"] = requiredFunction is null
+                ? JsonValue.Create("auto")
+                : new JsonObject { ["type"] = "function", ["name"] = requiredFunction };
         }
 
         var response = await PostAsync("responses", body, ct);

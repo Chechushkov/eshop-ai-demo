@@ -25,7 +25,7 @@ static class ModelBehaviorTests
                 "buyer-behavior-test", "token-fixture", history);
 
         SupportTools Tools(RunContext state, IKnowledgeSearch? knowledge = null) =>
-            new(knowledge ?? new FakeKnowledge(), new FakeOrders(), new FakeTickets(), state);
+            new(knowledge ?? new FakeKnowledge(), new FakeOrders(), new FakeTickets(), state, new AcceptAllKnowledge());
 
         async Task<SupportReply> Agent(RunContext state, JsonObject[] responses,
             IKnowledgeSearch? knowledge = null)
@@ -53,10 +53,9 @@ static class ModelBehaviorTests
             "Only the automatically completed knowledge search is recorded.");
 
         var emptyKnowledge = new EmptyKnowledge();
-        var noHits = await Agent(State(), [OrderCall(), SearchCall(), FakeModel.Text("Нет подходящих правил."),
-            FakeModel.Text("Нет подходящих правил.")], emptyKnowledge);
-        Check(emptyKnowledge.Calls == 2 && HasBehavior(noHits, ["SearchKnowledge"], true) && noHits.Sources.Count == 0,
-            "Completion records application intervention even when the model searched and both searches found no hits.");
+        var noHits = await Agent(State(), [OrderCall(), SearchCall(), FakeModel.Text("Нет подходящих правил.")], emptyKnowledge);
+        Check(emptyKnowledge.Calls == 1 && HasBehavior(noHits, [], true) && noHits.Sources.Count == 0,
+            "An empty completed search is not repeated; the confirmed-data reply records recomposition.");
 
         var ticketState = State();
         ticketState = new(ticketState.Request with { AllowTicket = true }, ticketState.UserId, ticketState.AccessToken);
@@ -136,6 +135,7 @@ static class ModelBehaviorTests
             var composer = new ReplyComposer(dependencies);
             var service = new SupportConversationService(new CachedStore(cached),
                 new SupportAgent(dependencies, composer), new SupportWorkflow(composer),
+                new KnowledgeRelevance(dependencies),
                 new SupportMetricsCollector(new("fixture-not-a-key", "fixture-model", "fixture-embedding")));
             var replay = await service.AskAsync(State().Request, "buyer-behavior-test", "token-fixture",
                 dependencies, dependencies, dependencies, default);
@@ -178,9 +178,9 @@ static class ModelBehaviorTests
     private sealed class TicketReplyModel(ScriptModel script, RunContext state) : IResponsesModel
     {
         public Task<JsonObject> RespondAsync(string instructions, IReadOnlyList<JsonNode> input,
-            JsonArray? tools, CancellationToken ct) => state.Ticket is { Created: true, Ticket: not null }
+            JsonArray? tools, CancellationToken ct, string? requiredFunction = null) => state.Ticket is { Created: true, Ticket: not null }
             ? Task.FromResult(FakeModel.Text(ValidReply + " Заявка: " + state.Ticket.Ticket.Id))
-            : script.RespondAsync(instructions, input, tools, ct);
+            : script.RespondAsync(instructions, input, tools, ct, requiredFunction);
     }
 
     private sealed class CachedStore(SupportReply cached) : IConversationStore
@@ -204,7 +204,7 @@ static class ModelBehaviorTests
     private sealed class UnexpectedDependencies : IResponsesModel, IKnowledgeSearch, IOrderReader, ITicketStore
     {
         public Task<JsonObject> RespondAsync(string instructions, IReadOnlyList<JsonNode> input,
-            JsonArray? tools, CancellationToken ct) =>
+            JsonArray? tools, CancellationToken ct, string? requiredFunction = null) =>
             throw new InvalidOperationException("Replay must not call the model.");
         public Task<IReadOnlyList<KnowledgeHit>> SearchAsync(string query, CancellationToken ct) =>
             throw new InvalidOperationException("Replay must not search knowledge.");

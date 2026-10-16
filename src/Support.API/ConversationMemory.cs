@@ -111,6 +111,7 @@ public sealed class SupportConversationService(
     IConversationStore store,
     SupportAgent agent,
     SupportWorkflow workflow,
+    IKnowledgeRelevance relevance,
     SupportMetricsCollector? metrics = null)
 {
     public async Task<SupportReply> AskAsync(
@@ -179,7 +180,8 @@ public sealed class SupportConversationService(
                 knowledge,
                 orders,
                 tickets,
-                context);
+                context,
+                relevance);
 
             SupportReply reply = request.Mode == "agent"
                 ? await agent.RunAsync(context, tools, ct)

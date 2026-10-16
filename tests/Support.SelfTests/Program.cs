@@ -2,6 +2,27 @@ using eShop.SupportApi;
 using System.Net;
 using System.Text.Json.Nodes;
 
+if (args.Contains("--retrieval-contracts-only", StringComparer.Ordinal))
+{
+    int contractChecks = await RetrievalContractTests.RunAsync();
+    Console.WriteLine($"OK: {contractChecks} retrieval-contract checks passed. No external APIs or PostgreSQL were called.");
+    return;
+}
+
+if (args.Contains("--reply-notices-only", StringComparer.Ordinal))
+{
+    int noticeChecks = await ReplyNoticeTests.RunAsync();
+    Console.WriteLine($"OK: {noticeChecks} reply-notice checks passed. No external APIs or PostgreSQL were called.");
+    return;
+}
+
+if (args.Contains("--knowledge-relevance-only", StringComparer.Ordinal))
+{
+    int relevanceChecks = await KnowledgeRelevanceTests.RunAsync();
+    Console.WriteLine($"OK: {relevanceChecks} knowledge-relevance checks passed. No external APIs or PostgreSQL were called.");
+    return;
+}
+
 if (args.Contains("--retrieval-only", StringComparer.Ordinal))
 {
     int retrievalChecks = await KnowledgeRetrievalTests.RunAsync();
@@ -35,7 +56,7 @@ var knowledge = new FakeKnowledge();
 var orders = new FakeOrders();
 var tickets = new FakeTickets();
 RunContext Context(SupportRequest request) => new(request, "buyer-test", "token-fixture");
-SupportTools Tools(RunContext context) => new(knowledge, orders, tickets, context);
+SupportTools Tools(RunContext context) => new(knowledge, orders, tickets, context, new AcceptAllKnowledge());
 
 // Authorization and idempotency are tested with fake dependencies.
 var blocked = Context(Request());
@@ -131,12 +152,25 @@ checks += await TicketPolicyTests.RunAsync();
 checks += await TicketAuthorizationTests.RunAsync();
 checks += await ModelBehaviorTests.RunAsync();
 checks += await KnowledgeRetrievalTests.RunAsync();
+checks += await KnowledgeRelevanceTests.RunAsync();
+checks += await ReplyNoticeTests.RunAsync();
+checks += await RetrievalContractTests.RunAsync();
 Console.WriteLine($"OK: {checks} offline checks passed. No external APIs or PostgreSQL were called.");
 
 sealed class FakeKnowledge : IKnowledgeSearch
 {
     public Task<IReadOnlyList<KnowledgeHit>> SearchAsync(string query, CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<KnowledgeHit>>([new("support-delivery#001", "Доставка", "Учебное правило.", 0.8)]);
+}
+// Existing authorization/workflow tests isolate relevance decisions with this fixture.
+sealed class AcceptAllKnowledge : IKnowledgeRelevance
+{
+    public Task<IReadOnlyList<KnowledgeHit>> SelectAsync(string question, string searchQuery,
+        IReadOnlyList<KnowledgeHit> candidates, IReadOnlyList<ConversationTurn> history, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult(candidates);
+    }
 }
 sealed class FakeOrders : IOrderReader
 {
@@ -163,7 +197,7 @@ sealed class FakeTickets : ITicketStore
 sealed class FakeModel(Func<string> text, bool needsTicket = false) : IResponsesModel
 {
     public int Calls { get; private set; }
-    public Task<JsonObject> RespondAsync(string instructions, IReadOnlyList<JsonNode> input, JsonArray? tools, CancellationToken ct)
+    public Task<JsonObject> RespondAsync(string instructions, IReadOnlyList<JsonNode> input, JsonArray? tools, CancellationToken ct, string? requiredFunction = null)
     {
         ct.ThrowIfCancellationRequested();
         Calls++;
@@ -204,7 +238,7 @@ sealed class ScriptModel(JsonObject[] replies) : IResponsesModel
 {
     private int index;
     public IReadOnlyList<JsonNode>? LastInput { get; private set; }
-    public Task<JsonObject> RespondAsync(string instructions, IReadOnlyList<JsonNode> input, JsonArray? tools, CancellationToken ct)
+    public Task<JsonObject> RespondAsync(string instructions, IReadOnlyList<JsonNode> input, JsonArray? tools, CancellationToken ct, string? requiredFunction = null)
     {
         LastInput = input.ToArray();
         return Task.FromResult(replies[index++]);

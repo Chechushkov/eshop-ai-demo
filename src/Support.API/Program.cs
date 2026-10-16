@@ -56,6 +56,7 @@ builder.Services.AddScoped<IResponsesModel>(sp =>
     sp.GetRequiredService<OpenAiApi>());
 
 builder.Services.AddScoped<ReplyComposer>();
+builder.Services.AddScoped<IKnowledgeRelevance, KnowledgeRelevance>();
 builder.Services.AddScoped<SupportAgent>();
 builder.Services.AddScoped<SupportWorkflow>();
 

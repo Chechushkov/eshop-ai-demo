@@ -43,7 +43,7 @@ static class KnowledgeRetrievalTests
             var state = State(mode: mode);
             var knowledge = new RecordingKnowledge(SearchFixture);
             var tickets = new FakeTickets();
-            var tools = new SupportTools(knowledge, new FakeOrders(), tickets, state);
+            var tools = new SupportTools(knowledge, new FakeOrders(), tickets, state, new AcceptAllKnowledge());
             var model = new SourceAwareModel(state);
             var composer = new ReplyComposer(model);
             var reply = mode == "workflow"
@@ -69,21 +69,21 @@ static class KnowledgeRetrievalTests
 
         var simple = State("When is the refund paid? I only want the policy.");
         var simpleKnowledge = new RecordingKnowledge(SearchFixture);
-        var simpleTools = new SupportTools(simpleKnowledge, new FakeOrders(), new FakeTickets(), simple);
+        var simpleTools = new SupportTools(simpleKnowledge, new FakeOrders(), new FakeTickets(), simple, new AcceptAllKnowledge());
         await simpleTools.SearchKnowledgeAsync(simple.Request.Question, default);
         Check(simpleKnowledge.Queries.SequenceEqual(new[] { simple.Request.Question }),
             "A single question plus explanatory text executes only one search.");
 
         var repeated = State("When is the refund paid? When is the refund paid?");
         var repeatedKnowledge = new RecordingKnowledge(SearchFixture);
-        await new SupportTools(repeatedKnowledge, new FakeOrders(), new FakeTickets(), repeated)
+        await new SupportTools(repeatedKnowledge, new FakeOrders(), new FakeTickets(), repeated, new AcceptAllKnowledge())
             .SearchKnowledgeAsync(repeated.Request.Question, default);
         Check(repeatedKnowledge.Queries.Count == 1,
             "Repeating the same question does not add duplicate searches.");
 
         var many = State("Question one? Question two? Question three? Question four?");
         var manyKnowledge = new RecordingKnowledge(SearchFixture);
-        await new SupportTools(manyKnowledge, new FakeOrders(), new FakeTickets(), many)
+        await new SupportTools(manyKnowledge, new FakeOrders(), new FakeTickets(), many, new AcceptAllKnowledge())
             .SearchKnowledgeAsync(many.Request.Question, default);
         Check(manyKnowledge.Queries.Count == 3 && manyKnowledge.Queries[0] == many.Request.Question,
             "A longer question list is bounded to three searches and retains the full query.");
@@ -97,7 +97,7 @@ static class KnowledgeRetrievalTests
             var knowledge = new RecordingKnowledge(SearchFixture);
             try
             {
-                await new SupportTools(knowledge, new FakeOrders(), new FakeTickets(), state)
+                await new SupportTools(knowledge, new FakeOrders(), new FakeTickets(), state, new AcceptAllKnowledge())
                     .SearchKnowledgeAsync(invalid, default);
                 throw new InvalidOperationException("An invalid query was accepted.");
             }
@@ -114,7 +114,7 @@ static class KnowledgeRetrievalTests
             var knowledge = new RecordingKnowledge(SearchFixture);
             try
             {
-                await new SupportTools(knowledge, new FakeOrders(), new FakeTickets(), state)
+                await new SupportTools(knowledge, new FakeOrders(), new FakeTickets(), state, new AcceptAllKnowledge())
                     .SearchKnowledgeAsync(CompoundQuestion, cancelled.Token);
                 throw new InvalidOperationException("Cancellation was ignored.");
             }
@@ -136,7 +136,7 @@ static class KnowledgeRetrievalTests
             });
             try
             {
-                await new SupportTools(knowledge, new FakeOrders(), new FakeTickets(), state)
+                await new SupportTools(knowledge, new FakeOrders(), new FakeTickets(), state, new AcceptAllKnowledge())
                     .SearchKnowledgeAsync(CompoundQuestion, cancelled.Token);
                 throw new InvalidOperationException("Cancellation between queries was ignored.");
             }
@@ -169,7 +169,7 @@ static class KnowledgeRetrievalTests
         public int Calls { get; private set; }
 
         public Task<JsonObject> RespondAsync(string instructions, IReadOnlyList<JsonNode> input,
-            JsonArray? tools, CancellationToken ct)
+            JsonArray? tools, CancellationToken ct, string? requiredFunction = null)
         {
             ct.ThrowIfCancellationRequested();
             Calls++;

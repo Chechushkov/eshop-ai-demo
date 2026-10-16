@@ -125,7 +125,7 @@ static class TicketAuthorizationTests
 
             var composer = new ReplyComposer(model);
             var conversations = new SupportConversationService(new ConversationFixture(history),
-                new SupportAgent(model, composer), new SupportWorkflow(composer));
+                new SupportAgent(model, composer), new SupportWorkflow(composer), new AcceptAllKnowledge());
             var reply = await conversations.AskAsync(ReceivedRequest, Buyer, "token-fixture",
                 new KnowledgeFixture(), new OwnedOrderFixture(), tickets, ct);
 
@@ -159,7 +159,7 @@ static class TicketAuthorizationTests
         public Dictionary<string, TicketResult> TicketResults { get; } = [];
 
         public Task<JsonObject> RespondAsync(string instructions,
-            IReadOnlyList<JsonNode> input, JsonArray? tools, CancellationToken ct)
+            IReadOnlyList<JsonNode> input, JsonArray? tools, CancellationToken ct, string? requiredFunction = null)
         {
             ct.ThrowIfCancellationRequested();
 

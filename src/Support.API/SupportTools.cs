@@ -6,13 +6,13 @@ namespace eShop.SupportApi;
 // User identity, token, selected order and write permission come from the C# context,
 // never from model-generated arguments.
 public sealed class SupportTools(IKnowledgeSearch knowledge, IOrderReader orders,
-    ITicketStore tickets, RunContext context)
+    ITicketStore tickets, RunContext context, IKnowledgeRelevance relevance)
 {
     public async Task<IReadOnlyList<KnowledgeHit>> SearchKnowledgeAsync(string query, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         context.Log("tool SearchKnowledge");
-        var queries = KnowledgeQueryPlanner.Build(query);
+        var queries = KnowledgeQueryPlanner.Build(query, context.Request.Question);
         context.Log($"rag query_plan queries={queries.Count}");
 
         var candidates = new List<KnowledgeHit>();
@@ -34,8 +34,13 @@ public sealed class SupportTools(IKnowledgeSearch knowledge, IOrderReader orders
             .OrderByDescending(hit => hit.Score)
             .ThenBy(hit => hit.Id, StringComparer.Ordinal)
             .ToArray();
-        context.AddSources(hits);
-        return hits;
+        var selected = await relevance.SelectAsync(context.Request.Question, query,
+            hits, context.History, ct);
+        ct.ThrowIfCancellationRequested();
+        context.Log($"rag relevance candidates={hits.Length} selected={selected.Count}");
+        context.AddSources(selected);
+        context.KnowledgeSearchCompleted = true;
+        return selected;
     }
 
     public async Task<OrderResult> GetOrderStatusAsync(CancellationToken ct)

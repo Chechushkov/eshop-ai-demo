@@ -85,11 +85,11 @@ public sealed class SupportAgent(
         // when the model skips a required tool.
         bool factsAdded = false;
 
-        if (context.Sources.Count == 0)
+        if (!context.KnowledgeSearchCompleted)
         {
             context.Log(
                 "agent C# invokes SearchKnowledge: " +
-                "model supplied no sources");
+                "model did not complete knowledge search");
 
             string query =
                 await composer.ResolveRetrievalQueryAsync(context, ct);
@@ -123,14 +123,15 @@ public sealed class SupportAgent(
             "agent validate initial",
             errors);
 
-        if (!completed || factsAdded || errors.Length > 0)
+        if (!completed || factsAdded || errors.Length > 0 || context.HasNoRelevantKnowledge)
         {
             context.ReplyRecomposed = true;
             context.Log("agent repair");
 
             context.Log(
                 $"agent repair reason: completed={completed} " +
-                $"factsAdded={factsAdded} errors={errors.Length}");
+                $"factsAdded={factsAdded} errors={errors.Length} " +
+                $"knowledgeMissing={context.HasNoRelevantKnowledge}");
 
             // Recompose the reply using current facts,
             // conversation history and validation feedback.

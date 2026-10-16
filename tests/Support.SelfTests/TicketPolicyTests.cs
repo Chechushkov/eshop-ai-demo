@@ -19,7 +19,7 @@ static class TicketPolicyTests
                 "buyer-test", "token-fixture", history);
 
         SupportTools Tools(RunContext context, FakeTickets tickets) =>
-            new(new FakeKnowledge(), new FakeOrders(), tickets, context);
+            new(new FakeKnowledge(), new FakeOrders(), tickets, context, new AcceptAllKnowledge());
 
         string NoTicketReply() =>
             "Правило [support-delivery#001]. " + TicketPolicy.NoTicketCreated;
@@ -262,7 +262,7 @@ static class TicketPolicyTests
         public int DecisionCalls { get; private set; }
 
         public Task<JsonObject> RespondAsync(string instructions,
-            IReadOnlyList<JsonNode> input, JsonArray? tools, CancellationToken ct)
+            IReadOnlyList<JsonNode> input, JsonArray? tools, CancellationToken ct, string? requiredFunction = null)
         {
             ct.ThrowIfCancellationRequested();
             Calls++;
