@@ -79,7 +79,7 @@ public static class EvaluationReport
             Wire.Boolean(manifest["working_tree_dirty"]), grouped, checked((int)(Wire.Integer(manifest["planned_requests"]) ?? 0)),
             status.AttemptedRequests, status.KnownCostEstimateUsd, status.TotalCostEstimateUsd,
             status.UsageUnknown, status.StopReason, setup.Length, SumCost(setup),
-            "Passing automatic checks awaits semantic review and database ticket-row verification.",
+            "Quality is determined by automatic checks, semantic review and database row verification. See the outcome counts and review results.",
             "Estimated standard token cost, with all input billed at the uncached rate; not an invoice.");
         Artifacts.Json(Path.Combine(directory, "summary.json"), summary);
         Artifacts.Write(Path.Combine(directory, "summary.md"), Markdown(summary, targets, reviews));
@@ -110,7 +110,7 @@ public static class EvaluationReport
     {
         var text = new StringBuilder("# Support evaluation summary\n\n");
         text.AppendLine($"Run: `{summary.RunId}`\n");
-        text.AppendLine("Quality remains pending until semantic review and database row checks are recorded.\n");
+        text.AppendLine(summary.QualityNote + "\n");
         text.AppendLine("| Mode | Attempts | Solved | Fallback solved | Unsolved | Pending | Invalid setup | Read completion | Recomposed | Unknown behavior |");
         text.AppendLine("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |");
         foreach (var (mode, data) in summary.Modes)

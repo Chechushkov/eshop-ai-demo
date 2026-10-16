@@ -129,10 +129,13 @@ public static class OwnershipPreflight
         var other = await Orders(otherOrdering, ct);
         var ownIds = owned.Select(o => Wire.Integer(Wire.Field(o, "orderNumber"))).ToHashSet();
         var otherIds = other.Select(o => Wire.Integer(Wire.Field(o, "orderNumber"))).ToHashSet();
+        string ownershipDetails = $"Fixtures: owned_order={fixtures.OwnedOrder}, foreign_order={fixtures.ForeignOrder}. " +
+            $"Main buyer visible order IDs: [{string.Join(", ", ownIds.Order())}]. " +
+            $"Other buyer visible order IDs: [{string.Join(", ", otherIds.Order())}].";
         EvaluationJson.Require(ownIds.Contains(fixtures.OwnedOrder) && !ownIds.Contains(fixtures.ForeignOrder),
-            "The main buyer must own owned_order and must not own foreign_order.");
+            "The main buyer must own owned_order and must not own foreign_order. " + ownershipDetails);
         EvaluationJson.Require(otherIds.Contains(fixtures.ForeignOrder) && !otherIds.Contains(fixtures.OwnedOrder),
-            "The other buyer must own foreign_order and must not own owned_order.");
+            "The other buyer must own foreign_order and must not own owned_order. " + ownershipDetails);
         var accepted = await support.RequestAsync("/api/support/conversations", ct: ct);
         EvaluationJson.Require(accepted.HttpStatus == 200 && accepted.Reply is JsonArray,
             "Support.API rejected the buyer token. Check the endpoint and orders audience.");
