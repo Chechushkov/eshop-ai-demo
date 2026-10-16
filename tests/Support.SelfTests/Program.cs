@@ -2,6 +2,13 @@ using eShop.SupportApi;
 using System.Net;
 using System.Text.Json.Nodes;
 
+if (args.Contains("--reply-scopes-only", StringComparer.Ordinal))
+{
+    int scopeChecks = await ReplyScopeTests.RunAsync();
+    Console.WriteLine($"OK: {scopeChecks} reply-scope checks passed. No external APIs or PostgreSQL were called.");
+    return;
+}
+
 if (args.Contains("--retrieval-contracts-only", StringComparer.Ordinal))
 {
     int contractChecks = await RetrievalContractTests.RunAsync();
@@ -154,6 +161,7 @@ checks += await ModelBehaviorTests.RunAsync();
 checks += await KnowledgeRetrievalTests.RunAsync();
 checks += await KnowledgeRelevanceTests.RunAsync();
 checks += await ReplyNoticeTests.RunAsync();
+checks += await ReplyScopeTests.RunAsync();
 checks += await RetrievalContractTests.RunAsync();
 Console.WriteLine($"OK: {checks} offline checks passed. No external APIs or PostgreSQL were called.");
 

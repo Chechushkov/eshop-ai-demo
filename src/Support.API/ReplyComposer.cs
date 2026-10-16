@@ -217,8 +217,14 @@ public sealed class ReplyComposer(IResponsesModel model)
         if (string.IsNullOrWhiteSpace(text))
             errors.Add("The reply is empty.");
 
-        if (context.HasNoRelevantKnowledge && text != BuildConfirmedReply(context))
-            errors.Add("Use the confirmed-data reply when no relevant knowledge was selected.");
+        if (context.HasNoRelevantKnowledge)
+        {
+            string confirmed = BuildConfirmedReply(context);
+            // Accept only the exact confirmed draft or its application-formatted
+            // final form. Mandatory notices cannot admit arbitrary extra claims.
+            if (text != confirmed && text != ReplyNotices.Format(confirmed, context))
+                errors.Add("Use the confirmed-data reply when no relevant knowledge was selected.");
+        }
 
         var citations = Regex
             .Matches(text, @"\[([^\]\r\n]{1,100})\]")

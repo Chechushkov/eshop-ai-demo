@@ -51,7 +51,7 @@ adds required facts, even when its first draft passes validation.
 | [KnowledgeRelevance](../src/Support.API/KnowledgeRelevance.cs) | Propose relevant candidate IDs through a model call; validate the selection and preserve original chunks. |
 | [OrderingClient](../src/Support.API/OrderingClient.cs) and [KnowledgeRepository](../src/Support.API/KnowledgeRepository.cs) | Read buyer-filtered orders, retrieve policy chunks and persist demo tickets. |
 | [OpenAiApi](../src/Support.API/OpenAiApi.cs), [ReplyComposer](../src/Support.API/ReplyComposer.cs) and [metrics collector](../src/Support.API/SupportMetricsCollector.cs) | Call the model and embedding endpoints, compose and validate replies, produce fallback text, and record timing and usage. |
-| [ReplyNotices](../src/Support.API/ReplyNotices.cs) | Append application-owned mandatory wording using only policy sources selected during the current run. |
+| [ReplyNotices](../src/Support.API/ReplyNotices.cs) | Append mandatory wording from current selected policies and confirmed current ticket-write results. |
 
 ## Trust boundary
 
@@ -117,27 +117,42 @@ not implemented.
 - Validation checks source IDs and confirmed ticket numbers. Invalid drafts get
   one repair attempt, then a deterministic fallback. Valid citations do not
   establish semantic correctness.
-- `ReplyComposer.Finish` appends a mandatory authority-limit notice when a chunk
-  from the `support-warranty` document is among the current selected sources.
-  The notice states that the assistant cannot confirm a defect or approve a
-  replacement or refund; support makes the decision. C# owns this wording and
-  cites an actual selected chunk. A candidate rejected by relevance selection,
-  a similar document name or a source present only in history does not enable it.
-  The rule applies to both modes and fallback without another model call.
-  Trailing literal copies of the fixed notice, including an uncited copy from
-  the model, are normalized into one canonical block with a selected citation.
-  Whitespace wrapping is allowed. Quoted occurrences and unavailable citations
-  remain visible; this normalization does not detect semantic paraphrases.
-  `reply notice warranty_authority` records assembly in the trace; this is not
-  draft recomposition. Stored replays retain their original answer.
-  This rule guarantees the notice's presence, not the completeness or consistency
-  of the generated explanation. Semantic evaluation still checks the whole answer.
+- `ReplyComposer.Finish` assembles application-owned notices for both modes and
+  fallback without another model call. Current selected `support-warranty`
+  chunks enable the warranty authority limit: the assistant cannot confirm a
+  defect or approve replacement or refund. Current selected
+  `support-returns-period` chunks enable an explicit distinction between demo
+  store policy and consumer law. Each policy notice cites an actual selected
+  chunk. Rejected candidates, similar document names and history-only sources
+  do not enable either policy notice.
+- A confirmed current `TicketResult` with `Created=true` and an actual ticket
+  enables a separate application boundary: saving the ticket does not establish
+  a delivery date or approve compensation, cancellation or refund. It also
+  explains that the demo ticket is stored locally and is not sent to an external
+  support service. This is a fact about the current C# tool implementation,
+  independent of KB retrieval; it needs no invented knowledge citation. Permission,
+  a model claim, a refused write or a previously saved ticket in history cannot
+  activate it. Changing the ticket integration requires revisiting this wording.
+- Trailing literal copies of active fixed notices, including uncited and
+  whitespace-wrapped copies from the model, are normalized into one canonical
+  block per rule in a stable order. Quoted occurrences and unavailable citations
+  remain visible; this is not semantic paraphrase detection. Valid citations on
+  a copied tool-boundary block are preserved. The trace records
+  `reply notice warranty_authority`, `reply notice return_policy_scope` and
+  `reply notice ticket_outcome` for active rules when assembly changes the reply;
+  this is not draft recomposition. Reformatting the final reply is idempotent.
+  With no relevant evidence, validation accepts only the exact confirmed-data
+  draft or its application-formatted final form; arbitrary extra facts still fail.
+  This pure formatting check does not add trace entries or call the model.
+  Stored replays retain their original answer. Notices guarantee required wording,
+  not the completeness or consistency of the whole answer; semantic review remains
+  necessary.
 - [Structured behavior](model-behavior.md) snapshots application completion and
   reply recomposition. Replay retains these original-generation observations;
   older replies without the object keep unknown data.
 - Preparation timing includes history loading and processing, but stops before
   reply persistence. Missing usage remains unknown; replay reports its own metrics.
-- The [255 offline checks](../tests/Support.SelfTests/Program.cs) use fake
+- The [318 offline checks](../tests/Support.SelfTests/Program.cs) use fake
   dependencies. Real-model quality and PostgreSQL integration need separate checks.
 - Model integration remains provider-specific; see
   [ADR 0003](adr/0003-direct-responses-api.md).
